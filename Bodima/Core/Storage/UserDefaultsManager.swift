@@ -27,9 +27,28 @@ class UserDefaultsManager {
         }
         return user
     }
+}
+
+extension UserDefaultsManager {
+    func updateUserProfileCompletion(_ completed: Bool) {
+        if var user = getUser() {
+            user.hasCompletedProfile = completed
+            saveUser(user)
+        }
+    }
+    
+    func saveUserProfileAvailability(_ isAvailable: Bool) {
+        UserDefaults.standard.set(isAvailable, forKey: "isUserProfileAvailable")
+    }
+    
+    func getUserProfileAvailability() -> Bool {
+        return UserDefaults.standard.bool(forKey: "isUserProfileAvailable")
+    }
     
     func clearAuthData() {
-        userDefaults.removeObject(forKey: AuthConstants.tokenKey)
-        userDefaults.removeObject(forKey: AuthConstants.userKey)
+        // Clear all auth related data
+        UserDefaults.standard.removeObject(forKey: "user")
+        UserDefaults.standard.removeObject(forKey: "token")
+        UserDefaults.standard.removeObject(forKey: "isUserProfileAvailable")
     }
 }

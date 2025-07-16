@@ -4,22 +4,21 @@ import SwiftUI
 @MainActor
 class AuthViewModel: ObservableObject {
     
-    // MARK: - Singleton
     static let shared = AuthViewModel()
     
-    // MARK: - Published Properties
     @Published var authState: AuthState = .idle
     @Published var isLoading = false
     @Published var alertMessage: AlertMessage?
     @Published var currentUser: User?
+    @Published var jwtToken: String?
+    @Published var isUserProfileAvailable = false
+    @Published var profileCheckCompleted = false
     
-    // MARK: - Dependencies
     private let networkManager: NetworkManager
     private let storageManager: UserDefaultsManager
     private let validator: AuthValidator
     private let imageProcessor: ImageProcessor
     
-    // MARK: - Initialization
     private init(
         networkManager: NetworkManager = NetworkManager.shared,
         storageManager: UserDefaultsManager = UserDefaultsManager.shared,
@@ -34,7 +33,6 @@ class AuthViewModel: ObservableObject {
         checkAuthStatus()
     }
     
-    // MARK: - Computed Properties
     var isAuthenticated: Bool {
         if case .authenticated = authState { return true }
         return false
@@ -50,35 +48,126 @@ class AuthViewModel: ObservableObject {
     }
     
     var needsProfileCompletion: Bool {
+        guard case .authenticated = authState else { return false }
         guard let user = currentUser else { return false }
-        return user.hasCompletedProfile == false || user.firstName == nil || user.lastName == nil
+        if !profileCheckCompleted { return false }
+        if isUserProfileAvailable { return false }
+        if user.hasCompletedProfile == true { return false }
+        
+        let hasFirstAndLastName = user.firstName != nil && !user.firstName!.isEmpty &&
+                                  user.lastName != nil && !user.lastName!.isEmpty
+        
+        let hasFullNameWithSpace = user.fullName != nil && !user.fullName!.isEmpty &&
+                                   user.fullName!.contains(" ")
+        
+        if hasFirstAndLastName || hasFullNameWithSpace {
+            var updatedUser = user
+            updatedUser.hasCompletedProfile = true
+            updateCurrentUser(updatedUser)
+            return false
+        }
+        
+        return true
     }
-}
-
-// MARK: - Auth Status Management
-extension AuthViewModel {
+    
+    var hasValidToken: Bool {
+        return jwtToken != nil && !jwtToken!.isEmpty
+    }
+    
     private func checkAuthStatus() {
+        profileCheckCompleted = false
+        
         if let user = storageManager.getUser(),
-           storageManager.getToken() != nil {
-            print("🔍 DEBUG - Found existing user session")
+           let token = storageManager.getToken() {
             currentUser = user
+            jwtToken = token
+            
+            let storedProfileAvailability = storageManager.getUserProfileAvailability()
+            isUserProfileAvailable = storedProfileAvailability
+            
             authState = .authenticated(user)
+            checkProfileCompletionFromServer()
         } else {
-            print("🔍 DEBUG - No existing user session found")
             authState = .unauthenticated
+            jwtToken = nil
+            isUserProfileAvailable = false
+            profileCheckCompleted = true
         }
     }
-}
-
-// MARK: - Authentication Operations
-extension AuthViewModel {
+    
+    func checkProfileCompletionFromServer() {
+        guard let userId = currentUser?.id,
+              let token = jwtToken else {
+            profileCheckCompleted = true
+            return
+        }
+        
+        let endpoint = APIEndpoint.getUserProfile(userId: userId)
+        let headers = ["Authorization": "Bearer \(token)"]
+        
+        networkManager.requestWithHeaders(
+            endpoint: endpoint,
+            body: nil as String?,
+            headers: headers,
+            responseType: ProfileResponse.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.handleProfileCheckResponse(result)
+            }
+        }
+    }
+    
+    private func handleProfileCheckResponse(_ result: Result<ProfileResponse, Error>) {
+        profileCheckCompleted = true
+        
+        switch result {
+        case .success(let response):
+            if response.success, let profileData = response.data {
+                isUserProfileAvailable = true
+                storageManager.saveUserProfileAvailability(true)
+                if var user = currentUser {
+                    user.hasCompletedProfile = true
+                    user.firstName = profileData.firstName
+                    user.lastName = profileData.lastName
+                    user.bio = profileData.bio
+                    user.phoneNumber = profileData.phoneNumber
+                    updateCurrentUser(user)
+                }
+            } else {
+                isUserProfileAvailable = false
+                storageManager.saveUserProfileAvailability(false)
+                if var user = currentUser {
+                    user.hasCompletedProfile = false
+                    updateCurrentUser(user)
+                }
+            }
+        case .failure(let error):
+            let errorString = error.localizedDescription
+            
+            if errorString.contains("resource exceeds maximum size") {
+                isUserProfileAvailable = true
+                storageManager.saveUserProfileAvailability(true)
+                if var user = currentUser {
+                    user.hasCompletedProfile = true
+                    updateCurrentUser(user)
+                }
+            } else {
+                isUserProfileAvailable = false
+                storageManager.saveUserProfileAvailability(false)
+                if var user = currentUser {
+                    user.hasCompletedProfile = false
+                    updateCurrentUser(user)
+                }
+            }
+        }
+    }
+    
     func signIn(email: String, password: String, rememberMe: Bool) {
         guard validator.validateSignInInput(email: email, password: password) else {
             showAlert(.error(validator.lastError))
             return
         }
         
-        print("🔍 DEBUG - Starting sign in process")
         setLoading(true)
         
         let request = LoginRequest(
@@ -101,7 +190,6 @@ extension AuthViewModel {
             return
         }
         
-        print("🔍 DEBUG - Starting sign up process")
         setLoading(true)
         
         let request = RegisterRequest(
@@ -114,38 +202,89 @@ extension AuthViewModel {
         performSignUpRequest(request: request, email: email, password: password)
     }
     
-    func createProfile(firstName: String, lastName: String, profileImage: UIImage?) {
-        guard validator.validateProfileInput(firstName: firstName, lastName: lastName) else {
+    func createProfile(
+        firstName: String,
+        lastName: String,
+        profileImageURL: String = "",
+        bio: String = "",
+        phoneNumber: String,
+        addressNo: String,
+        addressLine1: String,
+        addressLine2: String,
+        city: String,
+        district: String
+    ) {
+        guard validator.validateCompleteProfileInput(
+            firstName: firstName,
+            lastName: lastName,
+            phoneNumber: phoneNumber,
+            addressNo: addressNo,
+            addressLine1: addressLine1,
+            city: city,
+            district: district
+        ) else {
             showAlert(.error(validator.lastError))
+            return
+        }
+        
+        guard let userId = currentUser?.id else {
+            showAlert(.error("User ID not found. Please sign in again."))
+            return
+        }
+        
+        guard let token = jwtToken else {
+            showAlert(.error("Authentication token not found. Please sign in again."))
             return
         }
         
         setLoading(true)
         
-        let profileImageBase64 = imageProcessor.processProfileImage(profileImage)
-        
         let request = CreateProfileRequest(
-            firstName: firstName.trimmingCharacters(in: .whitespaces),
-            lastName: lastName.trimmingCharacters(in: .whitespaces),
-            profileImageBase64: profileImageBase64
+            userId: userId,
+            firstName: firstName,
+            lastName: lastName,
+            profileImageURL: profileImageURL,
+            bio: bio,
+            phoneNumber: phoneNumber,
+            addressNo: addressNo,
+            addressLine1: addressLine1,
+            addressLine2: addressLine2,
+            city: city,
+            district: district
         )
         
-        performProfileRequest(request: request)
+        performProfileRequest(request: request, token: token)
+    }
+    
+    func createProfile(firstName: String, lastName: String, profileImage: UIImage?) {
+        let profileImageURL = imageProcessor.processProfileImage(profileImage)
+        
+        createProfile(
+            firstName: firstName,
+            lastName: lastName,
+            profileImageURL: profileImageURL,
+            bio: "",
+            phoneNumber: "",
+            addressNo: "",
+            addressLine1: "",
+            addressLine2: "",
+            city: "",
+            district: ""
+        )
     }
     
     func signOut() {
-        print("🔍 DEBUG - Signing out user")
         storageManager.clearAuthData()
         currentUser = nil
+        jwtToken = nil
+        isUserProfileAvailable = false
+        profileCheckCompleted = false
         authState = .unauthenticated
         clearAlert()
         showAlert(.info("You have been signed out successfully"))
     }
-}
-
-// MARK: - Network Request Handlers
-private extension AuthViewModel {
-    func performAuthRequest<T: Codable>(endpoint: APIEndpoint, request: T, isSignUp: Bool) {
+    
+    private func performAuthRequest<T: Codable>(endpoint: APIEndpoint, request: T, isSignUp: Bool) {
         networkManager.request(
             endpoint: endpoint,
             body: request,
@@ -158,7 +297,7 @@ private extension AuthViewModel {
         }
     }
     
-    func performSignUpRequest(request: RegisterRequest, email: String, password: String) {
+    private func performSignUpRequest(request: RegisterRequest, email: String, password: String) {
         networkManager.request(
             endpoint: .register,
             body: request,
@@ -170,11 +309,20 @@ private extension AuthViewModel {
         }
     }
     
-    func performProfileRequest(request: CreateProfileRequest) {
-        networkManager.request(
-            endpoint: .createProfile,
+    private func performProfileRequest(request: CreateProfileRequest, token: String) {
+        let headers = [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json"
+        ]
+
+        let userId = currentUser?.id ?? ""
+        let endpoint = APIEndpoint.createProfile(userId: userId)
+
+        networkManager.requestWithHeaders(
+            endpoint: endpoint,
             body: request,
-            responseType: AuthResponse.self
+            headers: headers,
+            responseType: ProfileResponse.self
         ) { [weak self] result in
             DispatchQueue.main.async {
                 self?.setLoading(false)
@@ -182,17 +330,17 @@ private extension AuthViewModel {
             }
         }
     }
-}
-
-// MARK: - Response Handlers
-private extension AuthViewModel {
-    func handleAuthResponse(_ result: Result<AuthResponse, Error>, isSignUp: Bool) {
+    
+    private func handleAuthResponse(_ result: Result<AuthResponse, Error>, isSignUp: Bool) {
         switch result {
         case .success(let response):
-            print("🔍 DEBUG - Auth Response: Success=\(response.success), Message=\(response.message)")
-            
             if response.success {
                 if let userData = response.userData, let token = response.token {
+                    if let profileAvailable = response.isUserProfileAvailable {
+                        isUserProfileAvailable = profileAvailable
+                        storageManager.saveUserProfileAvailability(profileAvailable)
+                        profileCheckCompleted = true
+                    }
                     handleAuthSuccess(user: userData, token: token, isSignUp: isSignUp)
                 } else {
                     let message = response.message.isEmpty ? "Authentication successful but incomplete response received." : response.message
@@ -206,18 +354,14 @@ private extension AuthViewModel {
             }
             
         case .failure(let error):
-            print("🔍 DEBUG - Network Error: \(error)")
             handleNetworkError(error)
         }
     }
     
-    func handleSignUpResponse(_ result: Result<AuthResponse, Error>, email: String, password: String) {
+    private func handleSignUpResponse(_ result: Result<AuthResponse, Error>, email: String, password: String) {
         switch result {
         case .success(let response):
-            print("🔍 DEBUG - Signup Response: Success=\(response.success), Message=\(response.message)")
-            
             if response.success {
-                print("🔍 DEBUG - Signup successful, attempting auto-login...")
                 DispatchQueue.main.asyncAfter(deadline: .now() + AuthConstants.autoLoginDelay) {
                     self.performAutoLogin(email: email, password: password)
                 }
@@ -230,18 +374,26 @@ private extension AuthViewModel {
             
         case .failure(let error):
             setLoading(false)
-            print("🔍 DEBUG - Signup Error: \(error)")
             handleNetworkError(error)
         }
     }
     
-    func handleProfileResponse(_ result: Result<AuthResponse, Error>) {
+    private func handleProfileResponse(_ result: Result<ProfileResponse, Error>) {
         switch result {
         case .success(let response):
-            print("🔍 DEBUG - Profile Response: Success=\(response.success), Message=\(response.message)")
-            
-            if response.success, let userData = response.userData {
-                updateCurrentUser(userData)
+            if response.success {
+                isUserProfileAvailable = true
+                storageManager.saveUserProfileAvailability(true)
+                if var user = currentUser {
+                    user.hasCompletedProfile = true
+                    if let profileData = response.data {
+                        user.firstName = profileData.firstName
+                        user.lastName = profileData.lastName
+                        user.bio = profileData.bio
+                        user.phoneNumber = profileData.phoneNumber
+                    }
+                    updateCurrentUser(user)
+                }
                 showAlert(.success("Profile created successfully"))
             } else {
                 let message = response.message.isEmpty ? "Profile creation failed" : response.message
@@ -249,44 +401,59 @@ private extension AuthViewModel {
             }
             
         case .failure(let error):
-            print("🔍 DEBUG - Profile Error: \(error)")
-            handleNetworkError(error)
+            let errorString = error.localizedDescription
+            if errorString.contains("User profile already exists") {
+                isUserProfileAvailable = true
+                storageManager.saveUserProfileAvailability(true)
+                if var user = currentUser {
+                    user.hasCompletedProfile = true
+                    updateCurrentUser(user)
+                }
+                showAlert(.info("Profile already exists. Proceeding to main app."))
+            } else {
+                handleNetworkError(error)
+            }
         }
     }
     
-    func handleAuthSuccess(user: User, token: String, isSignUp: Bool) {
-        print("🔍 DEBUG - Auth Success - User: \(user.username), IsSignUp: \(isSignUp)")
-        
-        // Save to storage
+    private func handleAuthSuccess(user: User, token: String, isSignUp: Bool) {
         storageManager.saveToken(token)
         storageManager.saveUser(user)
         
-        // Update state
         currentUser = user
+        jwtToken = token
         authState = .authenticated(user)
         
-        // Clear alerts and show success message
+        if !profileCheckCompleted {
+            checkProfileCompletionFromServer()
+        }
+        
         clearAlert()
         let message = isSignUp ? "Welcome! Your account has been created." : "Welcome back!"
         showAlert(.success(message))
-        
-        print("🔍 DEBUG - Auth state updated to: \(authState)")
     }
     
-    func handleNetworkError(_ error: Error) {
-        print("🔍 DEBUG - Network Error: \(error)")
-        
+    private func handleNetworkError(_ error: Error) {
         let message = ErrorHandler.getErrorMessage(for: error)
         showAlert(.error(message))
-        authState = .unauthenticated
-    }
-}
-
-// MARK: - Auto Login Handler
-private extension AuthViewModel {
-    func performAutoLogin(email: String, password: String, retryCount: Int = 0) {
-        print("🔍 DEBUG - Auto-login attempt \(retryCount + 1)")
         
+        if let nsError = error as NSError?, nsError.code == 401 {
+            forceSignOut()
+        }
+    }
+    
+    private func forceSignOut() {
+        storageManager.clearAuthData()
+        currentUser = nil
+        jwtToken = nil
+        isUserProfileAvailable = false
+        profileCheckCompleted = false
+        authState = .unauthenticated
+        clearAlert()
+        showAlert(.error("Session expired. Please sign in again."))
+    }
+    
+    private func performAutoLogin(email: String, password: String, retryCount: Int = 0) {
         let request = LoginRequest(
             email: email,
             password: password,
@@ -304,7 +471,7 @@ private extension AuthViewModel {
         }
     }
     
-    func handleAutoLoginResponse(_ result: Result<AuthResponse, Error>, email: String, password: String, retryCount: Int) {
+    private func handleAutoLoginResponse(_ result: Result<AuthResponse, Error>, email: String, password: String, retryCount: Int) {
         switch result {
         case .success(let response):
             if response.success {
@@ -323,9 +490,8 @@ private extension AuthViewModel {
         }
     }
     
-    func retryAutoLoginIfNeeded(email: String, password: String, retryCount: Int) {
+    private func retryAutoLoginIfNeeded(email: String, password: String, retryCount: Int) {
         if retryCount < AuthConstants.autoLoginRetryCount {
-            print("🔍 DEBUG - Auto-login failed, retrying...")
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 self.performAutoLogin(email: email, password: password, retryCount: retryCount + 1)
             }
@@ -334,22 +500,19 @@ private extension AuthViewModel {
         }
     }
     
-    func shouldRetryAutoLogin(error: Error, retryCount: Int) -> Bool {
+    private func shouldRetryAutoLogin(error: Error, retryCount: Int) -> Bool {
         if let nsError = error as NSError?, nsError.code == 401, retryCount < AuthConstants.autoLoginRetryCount {
             return true
         }
         return false
     }
     
-    func showSuccessAndRequireManualLogin() {
+    private func showSuccessAndRequireManualLogin() {
         setLoading(false)
         showAlert(.success("Account created successfully! Please sign in."))
         authState = .unauthenticated
     }
-}
-
-// MARK: - Alert Management
-extension AuthViewModel {
+    
     func showAlert(_ alert: AlertMessage) {
         alertMessage = alert
         
@@ -365,20 +528,52 @@ extension AuthViewModel {
     func clearAlert() {
         alertMessage = nil
     }
-}
-
-// MARK: - Helper Methods
-private extension AuthViewModel {
-    func setLoading(_ loading: Bool) {
+    
+    private func setLoading(_ loading: Bool) {
         isLoading = loading
         if loading {
             clearAlert()
         }
     }
     
-    func updateCurrentUser(_ user: User) {
+    private func updateCurrentUser(_ user: User) {
         storageManager.saveUser(user)
         currentUser = user
         authState = .authenticated(user)
+    }
+    
+    func refreshTokenIfNeeded() {
+        
+    }
+    
+    func isTokenExpired() -> Bool {
+        guard let token = jwtToken else { return true }
+        
+        let components = token.components(separatedBy: ".")
+        guard components.count == 3 else { return true }
+        
+        let payload = components[1]
+        guard let data = Data(base64Encoded: payload.base64Padded()) else { return true }
+        
+        do {
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let exp = json["exp"] as? TimeInterval {
+                return Date().timeIntervalSince1970 > exp
+            }
+        } catch {
+            return true
+        }
+        
+        return true
+    }
+}
+
+private extension String {
+    func base64Padded() -> String {
+        let remainder = self.count % 4
+        if remainder > 0 {
+            return self + String(repeating: "=", count: 4 - remainder)
+        }
+        return self
     }
 }

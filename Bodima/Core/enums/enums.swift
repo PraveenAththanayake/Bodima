@@ -5,8 +5,8 @@ enum AlertType {
     case info
 }
 
-enum NetworkError: Error {
-    case invalidURL
-    case noData
-    case decodingError
-}
+//enum NetworkError: Error {
+//    case invalidURL
+//    case noData
+//    case decodingError
+//}

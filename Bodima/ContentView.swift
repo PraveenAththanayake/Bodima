@@ -15,14 +15,14 @@ struct ContentView: View {
                 AuthenticationView()
                 
             case .authenticated:
-//                // Check if user needs to complete profile
-//                if authViewModel.needsProfileCompletion {
-//                    CreateProfileView()
-//                } else {
-//                    // Show main app content
-//                    MainAppView()
-//                }
-                MainAppView()
+//                 Check if user needs to complete profile
+                if authViewModel.needsProfileCompletion {
+                    CreateProfileView()
+                } else {
+                    // Show main app content
+                    MainAppView()
+                }
+//                MainAppView()
                  
             }
         }
@@ -121,6 +121,11 @@ struct ProfileView: View {
                         Text(user.fullName ?? user.username)
                             .font(.title2)
                             .fontWeight(.semibold)
+                        
+                        Text(user.id ?? "No ID")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+
                         
                         Text(user.email)
                             .font(.subheadline)
