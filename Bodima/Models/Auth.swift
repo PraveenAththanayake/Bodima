@@ -1,30 +1,7 @@
 struct ProfileResponse: Codable {
     let success: Bool
-    let message: String
+    let message: String?
     let data: ProfileData?
-    
-    struct ProfileData: Codable {
-        let auth: String
-        let firstName: String
-        let lastName: String
-        let bio: String?
-        let phoneNumber: String
-        let addressNo: String
-        let addressLine1: String
-        let addressLine2: String?
-        let city: String
-        let district: String
-        let id: String
-        let createdAt: String
-        let updatedAt: String
-        
-        enum CodingKeys: String, CodingKey {
-            case auth, firstName, lastName, bio, phoneNumber
-            case addressNo, addressLine1, addressLine2, city, district
-            case id = "_id"
-            case createdAt, updatedAt
-        }
-    }
 }
 
 struct AuthResponse: Codable {
@@ -102,4 +79,3 @@ struct CreateProfileRequest: Codable {
         self.district = district
     }
 }
-

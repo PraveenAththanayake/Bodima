@@ -116,7 +116,7 @@ class AuthViewModel: ObservableObject {
             }
         }
     }
-    
+
     private func handleProfileCheckResponse(_ result: Result<ProfileResponse, Error>) {
         profileCheckCompleted = true
         
@@ -125,12 +125,28 @@ class AuthViewModel: ObservableObject {
             if response.success, let profileData = response.data {
                 isUserProfileAvailable = true
                 storageManager.saveUserProfileAvailability(true)
+                
                 if var user = currentUser {
+                    // Update user with all profile data
                     user.hasCompletedProfile = true
                     user.firstName = profileData.firstName
                     user.lastName = profileData.lastName
                     user.bio = profileData.bio
                     user.phoneNumber = profileData.phoneNumber
+                    user.addressNo = profileData.addressNo
+                    user.addressLine1 = profileData.addressLine1
+                    user.addressLine2 = profileData.addressLine2
+                    user.city = profileData.city
+                    user.district = profileData.district
+                    user.profileImageURL = profileData.profileImageURL
+                    user.createdAt = profileData.createdAt
+                    user.updatedAt = profileData.updatedAt
+                    
+                    // Update email and username from auth data if available
+                    user.email = profileData.auth.email
+                    user.username = profileData.auth.username
+                    user.id = profileData.id
+                    
                     updateCurrentUser(user)
                 }
             } else {
@@ -160,6 +176,70 @@ class AuthViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    // Also update the handleProfileResponse method for create profile
+    private func handleProfileResponse(_ result: Result<ProfileResponse, Error>) {
+        switch result {
+        case .success(let response):
+            if response.success {
+                isUserProfileAvailable = true
+                storageManager.saveUserProfileAvailability(true)
+                
+                if var user = currentUser {
+                    user.hasCompletedProfile = true
+                    
+                    if let profileData = response.data {
+                        // Update user with all profile data
+                        user.firstName = profileData.firstName
+                        user.lastName = profileData.lastName
+                        user.bio = profileData.bio
+                        user.phoneNumber = profileData.phoneNumber
+                        user.addressNo = profileData.addressNo
+                        user.addressLine1 = profileData.addressLine1
+                        user.addressLine2 = profileData.addressLine2
+                        user.city = profileData.city
+                        user.district = profileData.district
+                        user.profileImageURL = profileData.profileImageURL
+                        user.createdAt = profileData.createdAt
+                        user.updatedAt = profileData.updatedAt
+                        
+                        // Update email and username from auth data if available
+                        user.email = profileData.auth.email
+                        user.username = profileData.auth.username
+                        user.id = profileData.id
+                    }
+                    
+                    updateCurrentUser(user)
+                }
+                showAlert(.success("Profile created successfully"))
+            } else {
+                if let message = response.message {
+                    showAlert(.error(message))
+                } else {
+                    showAlert(.error("Profile creation failed"))
+                }
+            }
+            
+        case .failure(let error):
+            let errorString = error.localizedDescription
+            if errorString.contains("User profile already exists") {
+                isUserProfileAvailable = true
+                storageManager.saveUserProfileAvailability(true)
+                if var user = currentUser {
+                    user.hasCompletedProfile = true
+                    updateCurrentUser(user)
+                }
+                showAlert(.info("Profile already exists. Proceeding to main app."))
+            } else {
+                handleNetworkError(error)
+            }
+        }
+    }
+
+    // Add a method to refresh profile data
+    func refreshProfile() {
+        checkProfileCompletionFromServer()
     }
     
     func signIn(email: String, password: String, rememberMe: Bool) {
@@ -378,44 +458,6 @@ class AuthViewModel: ObservableObject {
         }
     }
     
-    private func handleProfileResponse(_ result: Result<ProfileResponse, Error>) {
-        switch result {
-        case .success(let response):
-            if response.success {
-                isUserProfileAvailable = true
-                storageManager.saveUserProfileAvailability(true)
-                if var user = currentUser {
-                    user.hasCompletedProfile = true
-                    if let profileData = response.data {
-                        user.firstName = profileData.firstName
-                        user.lastName = profileData.lastName
-                        user.bio = profileData.bio
-                        user.phoneNumber = profileData.phoneNumber
-                    }
-                    updateCurrentUser(user)
-                }
-                showAlert(.success("Profile created successfully"))
-            } else {
-                let message = response.message.isEmpty ? "Profile creation failed" : response.message
-                showAlert(.error(message))
-            }
-            
-        case .failure(let error):
-            let errorString = error.localizedDescription
-            if errorString.contains("User profile already exists") {
-                isUserProfileAvailable = true
-                storageManager.saveUserProfileAvailability(true)
-                if var user = currentUser {
-                    user.hasCompletedProfile = true
-                    updateCurrentUser(user)
-                }
-                showAlert(.info("Profile already exists. Proceeding to main app."))
-            } else {
-                handleNetworkError(error)
-            }
-        }
-    }
-    
     private func handleAuthSuccess(user: User, token: String, isSignUp: Bool) {
         storageManager.saveToken(token)
         storageManager.saveUser(user)
@@ -566,6 +608,8 @@ class AuthViewModel: ObservableObject {
         
         return true
     }
+    
+    
 }
 
 private extension String {
