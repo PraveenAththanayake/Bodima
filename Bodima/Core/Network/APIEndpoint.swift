@@ -4,7 +4,11 @@ enum APIEndpoint {
     case createProfile(userId: String)
     case getUserProfile(userId: String)
     case createHabitation
+    case addHabitaionImage(habitationId: String)
+    case getHabitations
+    case getLocationByHabitationId(habitationId: String)
     case getHabitationById(habitationId: String)
+    case getFeaturesByHabitationId(habitationId: String)
     case createLocation
     case createHabitationFeature(habitationId: String)
 
@@ -20,20 +24,28 @@ enum APIEndpoint {
             return "/users/\(userId)"
         case .createHabitation:
             return "/habitations"
+        case .addHabitaionImage(let habitationId):
+            return "/habitations/\(habitationId)/pictures"
         case .getHabitationById(let habitationId):
             return "/habitations/\(habitationId)"
         case .createLocation:
             return "/locations"
         case .createHabitationFeature(let habitationId):
             return "/habitation-feature/\(habitationId)"
+        case .getHabitations:
+            return "/habitations"
+        case .getLocationByHabitationId(let habitationId):
+            return "/locations/habitation/\(habitationId)"
+        case .getFeaturesByHabitationId(let habitationId):
+            return "/habitation-feature/\(habitationId)"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .login, .register, .createProfile, .createHabitation, .createLocation, .createHabitationFeature:
+        case .login, .register, .createProfile, .createHabitation, .createLocation, .createHabitationFeature, .addHabitaionImage:
             return .POST
-        case .getUserProfile, .getHabitationById:
+        case .getUserProfile, .getHabitationById, .getHabitations, .getLocationByHabitationId, .getFeaturesByHabitationId:
             return .GET
         }
     }
