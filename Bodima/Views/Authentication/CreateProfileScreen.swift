@@ -3,6 +3,7 @@ import PhotosUI
 
 // MARK: - Create Profile View
 struct CreateProfileView: View {
+    @StateObject private var profileViewModel = ProfileViewModel()
     @StateObject private var authViewModel = AuthViewModel.shared
     @State private var firstName = ""
     @State private var lastName = ""
@@ -16,6 +17,7 @@ struct CreateProfileView: View {
     @State private var profileImage: UIImage?
     @State private var showingImagePicker = false
     @State private var profileImageURL = ""
+    @State private var showingSuccessAlert = false
     
     var body: some View {
         NavigationView {
@@ -74,7 +76,7 @@ struct CreateProfileView: View {
                                     )
                             }
                         }
-                        .disabled(authViewModel.isLoading)
+                        .disabled(profileViewModel.isCreatingProfile)
                         
                         Text("Tap to add profile photo")
                             .font(.system(size: 14))
@@ -98,7 +100,7 @@ struct CreateProfileView: View {
                                     
                                     TextField("First name", text: $firstName)
                                         .textFieldStyle(CustomTextFieldStyle())
-                                        .disabled(authViewModel.isLoading)
+                                        .disabled(profileViewModel.isCreatingProfile)
                                 }
                                 
                                 // Last Name
@@ -109,7 +111,7 @@ struct CreateProfileView: View {
                                     
                                     TextField("Last name", text: $lastName)
                                         .textFieldStyle(CustomTextFieldStyle())
-                                        .disabled(authViewModel.isLoading)
+                                        .disabled(profileViewModel.isCreatingProfile)
                                 }
                             }
                             
@@ -121,7 +123,7 @@ struct CreateProfileView: View {
                                 
                                 TextField("Tell us about yourself...", text: $bio, axis: .vertical)
                                     .textFieldStyle(CustomTextFieldStyle(minHeight: 80))
-                                    .disabled(authViewModel.isLoading)
+                                    .disabled(profileViewModel.isCreatingProfile)
                             }
                         }
                         
@@ -140,7 +142,7 @@ struct CreateProfileView: View {
                                 TextField("e.g., +94775541417", text: $phoneNumber)
                                     .textFieldStyle(CustomTextFieldStyle())
                                     .keyboardType(.phonePad)
-                                    .disabled(authViewModel.isLoading)
+                                    .disabled(profileViewModel.isCreatingProfile)
                             }
                         }
                         
@@ -158,7 +160,7 @@ struct CreateProfileView: View {
                                 
                                 TextField("e.g., NO 34/1", text: $addressNo)
                                     .textFieldStyle(CustomTextFieldStyle())
-                                    .disabled(authViewModel.isLoading)
+                                    .disabled(profileViewModel.isCreatingProfile)
                             }
                             
                             // Address Line 1
@@ -169,7 +171,7 @@ struct CreateProfileView: View {
                                 
                                 TextField("e.g., Pansala Udaha", text: $addressLine1)
                                     .textFieldStyle(CustomTextFieldStyle())
-                                    .disabled(authViewModel.isLoading)
+                                    .disabled(profileViewModel.isCreatingProfile)
                             }
                             
                             // Address Line 2
@@ -180,7 +182,7 @@ struct CreateProfileView: View {
                                 
                                 TextField("e.g., Welhena", text: $addressLine2)
                                     .textFieldStyle(CustomTextFieldStyle())
-                                    .disabled(authViewModel.isLoading)
+                                    .disabled(profileViewModel.isCreatingProfile)
                             }
                             
                             HStack(spacing: 12) {
@@ -192,7 +194,7 @@ struct CreateProfileView: View {
                                     
                                     TextField("e.g., Minuwangoda", text: $city)
                                         .textFieldStyle(CustomTextFieldStyle())
-                                        .disabled(authViewModel.isLoading)
+                                        .disabled(profileViewModel.isCreatingProfile)
                                 }
                                 
                                 // District
@@ -203,7 +205,7 @@ struct CreateProfileView: View {
                                     
                                     TextField("e.g., Gampaha", text: $district)
                                         .textFieldStyle(CustomTextFieldStyle())
-                                        .disabled(authViewModel.isLoading)
+                                        .disabled(profileViewModel.isCreatingProfile)
                                 }
                             }
                         }
@@ -215,14 +217,14 @@ struct CreateProfileView: View {
                         createProfile()
                     }) {
                         HStack {
-                            if authViewModel.isLoading {
+                            if profileViewModel.isCreatingProfile {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: AppColors.primaryForeground))
                                     .scaleEffect(0.9)
                                     .padding(.trailing, 8)
                             }
                             
-                            Text(authViewModel.isLoading ? "Creating Profile..." : "Complete Profile")
+                            Text(profileViewModel.isCreatingProfile ? "Creating Profile..." : "Complete Profile")
                                 .font(.system(size: 17, weight: .semibold))
                                 .foregroundColor(AppColors.primaryForeground)
                         }
@@ -230,10 +232,10 @@ struct CreateProfileView: View {
                         .padding(.vertical, 16)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(authViewModel.isLoading ? AppColors.primary.opacity(0.6) : AppColors.primary)
+                                .fill(profileViewModel.isCreatingProfile ? AppColors.primary.opacity(0.6) : AppColors.primary)
                         )
                     }
-                    .disabled(authViewModel.isLoading || !isFormValid)
+                    .disabled(profileViewModel.isCreatingProfile || !isFormValid)
                     .padding(.horizontal, 24)
                     .padding(.top, 16)
                     
@@ -243,12 +245,11 @@ struct CreateProfileView: View {
                         .foregroundColor(AppColors.mutedForeground)
                         .padding(.horizontal, 24)
                     
-                    // Alert Message Display
-                    if let alertMessage = authViewModel.alertMessage {
-                        AlertBanner(message: alertMessage) {
-                            authViewModel.clearAlert()
-                        }
-                        .padding(.horizontal, 24)
+                    // Error Message Display
+                    if let errorMessage = profileViewModel.profileCreationMessage, !profileViewModel.profileCreationSuccess {
+                        AlertBanner(message: AlertMessage.error(errorMessage), onDismiss: {
+                            profileViewModel.resetProfileCreationState()
+                        })                        .padding(.horizontal, 24)
                         .padding(.top, 16)
                     }
                 }
@@ -258,6 +259,19 @@ struct CreateProfileView: View {
             .navigationBarHidden(true)
             .sheet(isPresented: $showingImagePicker) {
                 ImagePicker(image: $profileImage)
+            }
+            .alert("Success!", isPresented: $showingSuccessAlert) {
+                Button("Continue") {
+                    // Handle success - maybe navigate to main app
+                    profileViewModel.resetProfileCreationState()
+                }
+            } message: {
+                Text(profileViewModel.profileCreationMessage ?? "Profile created successfully!")
+            }
+            .onChange(of: profileViewModel.profileCreationSuccess) { success in
+                if success {
+                    showingSuccessAlert = true
+                }
             }
         }
     }
@@ -275,6 +289,12 @@ struct CreateProfileView: View {
     
     // MARK: - Methods
     private func createProfile() {
+        // Get user ID from auth or UserDefaults
+        guard let userId = authViewModel.currentUser?.id ?? UserDefaults.standard.string(forKey: "user_id") else {
+            profileViewModel.showProfileCreationError("User ID not found. Please login again.")
+            return
+        }
+        
         // Process profile image if available
         var processedImageURL = ""
         if profileImage != nil {
@@ -283,8 +303,9 @@ struct CreateProfileView: View {
             processedImageURL = "https://example.com/profile-pic.jpg"
         }
         
-        // Create the profile request
-        authViewModel.createProfile(
+        // Create the profile using ProfileViewModel
+        profileViewModel.createProfile(
+            userId: userId,
             firstName: firstName.trimmingCharacters(in: .whitespaces),
             lastName: lastName.trimmingCharacters(in: .whitespaces),
             profileImageURL: processedImageURL,
@@ -323,6 +344,7 @@ struct CustomTextFieldStyle: TextFieldStyle {
             )
     }
 }
+
 
 #Preview {
     CreateProfileView()

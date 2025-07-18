@@ -79,3 +79,48 @@ struct CreateProfileRequest: Codable {
         self.district = district
     }
 }
+
+struct CreateProfileResponse: Codable {
+    let success: Bool
+    let message: String
+    let data: CreatedProfileData?
+}
+
+struct CreatedProfileData: Codable {
+    let id: String
+    let auth: String  // This is just the auth ID reference
+    let firstName: String?
+    let lastName: String?
+    let bio: String?
+    let phoneNumber: String?
+    let addressNo: String?
+    let addressLine1: String?
+    let addressLine2: String?
+    let city: String?
+    let district: String?
+    let profileImageURL: String?
+    let createdAt: String?
+    let updatedAt: String?
+    let v: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case auth
+        case firstName
+        case lastName
+        case bio
+        case phoneNumber
+        case addressNo
+        case addressLine1
+        case addressLine2
+        case city
+        case district
+        case profileImageURL
+        case createdAt
+        case updatedAt
+        case v = "__v"
+    }
+}
+
+
+

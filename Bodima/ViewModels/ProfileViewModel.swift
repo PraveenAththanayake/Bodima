@@ -1,12 +1,16 @@
 import Foundation
 
-
 @MainActor
 class ProfileViewModel: ObservableObject {
     @Published var userProfile: ProfileData?
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var hasError = false
+    
+    // Create profile specific states
+    @Published var isCreatingProfile = false
+    @Published var profileCreationSuccess = false
+    @Published var profileCreationMessage: String?
     
     private let networkManager = NetworkManager.shared
     
@@ -41,7 +45,7 @@ class ProfileViewModel: ObservableObject {
                 switch result {
                 case .success(let response):
                     print("🔍 DEBUG - ProfileResponse success: \(response.success)")
-                    print("🔍 DEBUG - ProfileResponse message: \(response.message)")
+                    print("🔍 DEBUG - ProfileResponse message: \(response.message ?? "")")
                     print("🔍 DEBUG - ProfileResponse data: \(String(describing: response.data))")
                     
                     if response.success {
@@ -59,51 +63,144 @@ class ProfileViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Manual JSON Parsing (for debugging)
-    private func parseProfileData(_ data: [String: Any]) {
-        guard let profileId = data["_id"] as? String else {
-            showError("Profile ID not found")
+    // MARK: - Create Profile
+    func createProfile(
+        userId: String,
+        firstName: String,
+        lastName: String,
+        profileImageURL: String,
+        bio: String,
+        phoneNumber: String,
+        addressNo: String,
+        addressLine1: String,
+        addressLine2: String,
+        city: String,
+        district: String
+    ) {
+        guard !userId.isEmpty else {
+            showProfileCreationError("User ID is required")
             return
         }
         
-        guard let authData = data["auth"] as? [String: Any],
-              let authId = authData["_id"] as? String,
-              let email = authData["email"] as? String,
-              let username = authData["username"] as? String,
-              let authCreatedAt = authData["createdAt"] as? String,
-              let authUpdatedAt = authData["updatedAt"] as? String else {
-            showError("Auth data is incomplete")
+        guard let token = UserDefaults.standard.string(forKey: "auth_token") else {
+            showProfileCreationError("Authentication token not found. Please login again.")
             return
         }
         
-        let auth = AuthData(
-            id: authId,
-            email: email,
-            username: username,
-            createdAt: authCreatedAt,
-            updatedAt: authUpdatedAt
+        isCreatingProfile = true
+        clearProfileCreationError()
+        
+        let createProfileRequest = CreateProfileRequest(
+            userId: userId,
+            firstName: firstName,
+            lastName: lastName,
+            profileImageURL: profileImageURL,
+            bio: bio,
+            phoneNumber: phoneNumber,
+            addressNo: addressNo,
+            addressLine1: addressLine1,
+            addressLine2: addressLine2,
+            city: city,
+            district: district
         )
         
-        let profile = ProfileData(
-            id: profileId,
-            auth: auth,
-            firstName: data["firstName"] as? String,
-            lastName: data["lastName"] as? String,
-            bio: data["bio"] as? String,
-            phoneNumber: data["phoneNumber"] as? String,
-            addressNo: data["addressNo"] as? String,
-            addressLine1: data["addressLine1"] as? String,
-            addressLine2: data["addressLine2"] as? String,
-            city: data["city"] as? String,
-            district: data["district"] as? String,
-            profileImageURL: data["profileImageURL"] as? String,
-            createdAt: data["createdAt"] as? String,
-            updatedAt: data["updatedAt"] as? String,
-            profileImageUrl: data["profileImageUrl"] as? String
-        )
+        let headers = [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json"
+        ]
         
-        self.userProfile = profile
-        print("✅ Profile parsed successfully")
+        // Use the correct response type for create profile
+        networkManager.requestWithHeaders(
+            endpoint: .createProfile(userId: userId),
+            body: createProfileRequest,
+            headers: headers,
+            responseType: CreateProfileResponse.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isCreatingProfile = false
+                
+                switch result {
+                case .success(let response):
+                    print("🔍 DEBUG - CreateProfile success: \(response.success)")
+                    print("🔍 DEBUG - CreateProfile message: \(response.message)")
+                    print("🔍 DEBUG - CreateProfile data: \(String(describing: response.data))")
+                    
+                    if response.success {
+                        self?.profileCreationSuccess = true
+                        self?.profileCreationMessage = response.message
+                        print("✅ Profile created successfully")
+                        
+                        // Update AuthViewModel to reflect profile completion
+                        self?.updateAuthViewModelAfterProfileCreation(
+                            firstName: firstName,
+                            lastName: lastName,
+                            bio: bio,
+                            phoneNumber: phoneNumber,
+                            addressNo: addressNo,
+                            addressLine1: addressLine1,
+                            addressLine2: addressLine2,
+                            city: city,
+                            district: district,
+                            profileImageURL: profileImageURL
+                        )
+                        
+                        // Optionally store the created profile data
+                        if let createdProfile = response.data {
+                            print("✅ Created profile data: \(createdProfile)")
+                        }
+                    } else {
+                        self?.showProfileCreationError(response.message)
+                    }
+                    
+                case .failure(let error):
+                    print("🔍 DEBUG - Create profile error: \(error)")
+                    self?.handleProfileCreationError(error)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Update AuthViewModel After Profile Creation
+    private func updateAuthViewModelAfterProfileCreation(
+        firstName: String,
+        lastName: String,
+        bio: String,
+        phoneNumber: String,
+        addressNo: String,
+        addressLine1: String,
+        addressLine2: String,
+        city: String,
+        district: String,
+        profileImageURL: String
+    ) {
+        let authViewModel = AuthViewModel.shared
+        
+        // Update the current user with profile completion
+        if var currentUser = authViewModel.currentUser {
+            currentUser.hasCompletedProfile = true
+            currentUser.firstName = firstName
+            currentUser.lastName = lastName
+            currentUser.bio = bio
+            currentUser.phoneNumber = phoneNumber
+            currentUser.addressNo = addressNo
+            currentUser.addressLine1 = addressLine1
+            currentUser.addressLine2 = addressLine2
+            currentUser.city = city
+            currentUser.district = district
+            currentUser.profileImageURL = profileImageURL
+            
+            // Update the AuthViewModel
+            authViewModel.updateCurrentUser(currentUser)
+            
+            // Mark profile as available
+            authViewModel.isUserProfileAvailable = true
+            authViewModel.profileCheckCompleted = true
+            
+            // Save profile availability to storage
+            UserDefaultsManager.shared.saveUserProfileAvailability(true)
+            
+            print("✅ AuthViewModel updated with profile completion")
+        }
     }
     
     // MARK: - Refresh Profile
@@ -133,6 +230,27 @@ class ProfileViewModel: ObservableObject {
         }
     }
     
+    private func handleProfileCreationError(_ error: Error) {
+        if let networkError = error as? NetworkError {
+            switch networkError {
+            case .unauthorized:
+                showProfileCreationError("Session expired. Please login again.")
+                UserDefaults.standard.removeObject(forKey: "auth_token")
+                
+            case .clientError(let message):
+                showProfileCreationError(message)
+                
+            case .serverError(let message):
+                showProfileCreationError("Server error: \(message)")
+                
+            default:
+                showProfileCreationError(networkError.localizedDescription)
+            }
+        } else {
+            showProfileCreationError("Network error: \(error.localizedDescription)")
+        }
+    }
+    
     func showError(_ message: String) {
         errorMessage = message
         hasError = true
@@ -142,6 +260,17 @@ class ProfileViewModel: ObservableObject {
     private func clearError() {
         errorMessage = nil
         hasError = false
+    }
+    
+    func showProfileCreationError(_ message: String) {
+        profileCreationMessage = message
+        profileCreationSuccess = false
+        print("❌ Profile Creation Error: \(message)")
+    }
+    
+    private func clearProfileCreationError() {
+        profileCreationMessage = nil
+        profileCreationSuccess = false
     }
     
     // MARK: - Computed Properties
@@ -217,5 +346,13 @@ class ProfileViewModel: ObservableObject {
     func clearProfile() {
         userProfile = nil
         clearError()
+        clearProfileCreationError()
+    }
+    
+    // MARK: - Reset Profile Creation State
+    func resetProfileCreationState() {
+        isCreatingProfile = false
+        profileCreationSuccess = false
+        profileCreationMessage = nil
     }
 }

@@ -17,18 +17,15 @@ class AuthViewModel: ObservableObject {
     private let networkManager: NetworkManager
     private let storageManager: UserDefaultsManager
     private let validator: AuthValidator
-    private let imageProcessor: ImageProcessor
     
     private init(
         networkManager: NetworkManager = NetworkManager.shared,
         storageManager: UserDefaultsManager = UserDefaultsManager.shared,
-        validator: AuthValidator = AuthValidator(),
-        imageProcessor: ImageProcessor = ImageProcessor()
+        validator: AuthValidator = AuthValidator()
     ) {
         self.networkManager = networkManager
         self.storageManager = storageManager
         self.validator = validator
-        self.imageProcessor = imageProcessor
         
         checkAuthStatus()
     }
@@ -178,65 +175,6 @@ class AuthViewModel: ObservableObject {
         }
     }
 
-    // Also update the handleProfileResponse method for create profile
-    private func handleProfileResponse(_ result: Result<ProfileResponse, Error>) {
-        switch result {
-        case .success(let response):
-            if response.success {
-                isUserProfileAvailable = true
-                storageManager.saveUserProfileAvailability(true)
-                
-                if var user = currentUser {
-                    user.hasCompletedProfile = true
-                    
-                    if let profileData = response.data {
-                        // Update user with all profile data
-                        user.firstName = profileData.firstName
-                        user.lastName = profileData.lastName
-                        user.bio = profileData.bio
-                        user.phoneNumber = profileData.phoneNumber
-                        user.addressNo = profileData.addressNo
-                        user.addressLine1 = profileData.addressLine1
-                        user.addressLine2 = profileData.addressLine2
-                        user.city = profileData.city
-                        user.district = profileData.district
-                        user.profileImageURL = profileData.profileImageURL
-                        user.createdAt = profileData.createdAt
-                        user.updatedAt = profileData.updatedAt
-                        
-                        // Update email and username from auth data if available
-                        user.email = profileData.auth.email
-                        user.username = profileData.auth.username
-                        user.id = profileData.id
-                    }
-                    
-                    updateCurrentUser(user)
-                }
-                showAlert(.success("Profile created successfully"))
-            } else {
-                if let message = response.message {
-                    showAlert(.error(message))
-                } else {
-                    showAlert(.error("Profile creation failed"))
-                }
-            }
-            
-        case .failure(let error):
-            let errorString = error.localizedDescription
-            if errorString.contains("User profile already exists") {
-                isUserProfileAvailable = true
-                storageManager.saveUserProfileAvailability(true)
-                if var user = currentUser {
-                    user.hasCompletedProfile = true
-                    updateCurrentUser(user)
-                }
-                showAlert(.info("Profile already exists. Proceeding to main app."))
-            } else {
-                handleNetworkError(error)
-            }
-        }
-    }
-
     // Add a method to refresh profile data
     func refreshProfile() {
         checkProfileCompletionFromServer()
@@ -282,77 +220,6 @@ class AuthViewModel: ObservableObject {
         performSignUpRequest(request: request, email: email, password: password)
     }
     
-    func createProfile(
-        firstName: String,
-        lastName: String,
-        profileImageURL: String = "",
-        bio: String = "",
-        phoneNumber: String,
-        addressNo: String,
-        addressLine1: String,
-        addressLine2: String,
-        city: String,
-        district: String
-    ) {
-        guard validator.validateCompleteProfileInput(
-            firstName: firstName,
-            lastName: lastName,
-            phoneNumber: phoneNumber,
-            addressNo: addressNo,
-            addressLine1: addressLine1,
-            city: city,
-            district: district
-        ) else {
-            showAlert(.error(validator.lastError))
-            return
-        }
-        
-        guard let userId = currentUser?.id else {
-            showAlert(.error("User ID not found. Please sign in again."))
-            return
-        }
-        
-        guard let token = jwtToken else {
-            showAlert(.error("Authentication token not found. Please sign in again."))
-            return
-        }
-        
-        setLoading(true)
-        
-        let request = CreateProfileRequest(
-            userId: userId,
-            firstName: firstName,
-            lastName: lastName,
-            profileImageURL: profileImageURL,
-            bio: bio,
-            phoneNumber: phoneNumber,
-            addressNo: addressNo,
-            addressLine1: addressLine1,
-            addressLine2: addressLine2,
-            city: city,
-            district: district
-        )
-        
-        performProfileRequest(request: request, token: token)
-    }
-    
-    func createProfile(firstName: String, lastName: String, profileImage: UIImage?) {
-        let profileImageURL = imageProcessor.processProfileImage(profileImage)
-        
-        createProfile(
-            firstName: firstName,
-            lastName: lastName,
-            profileImageURL: profileImageURL,
-            bio: "",
-            phoneNumber: "",
-            addressNo: "",
-            addressLine1: "",
-            addressLine2: "",
-            city: "",
-            district: ""
-        )
-    }
-    
     func signOut() {
         storageManager.clearAuthData()
         currentUser = nil
@@ -385,28 +252,6 @@ class AuthViewModel: ObservableObject {
         ) { [weak self] result in
             DispatchQueue.main.async {
                 self?.handleSignUpResponse(result, email: email, password: password)
-            }
-        }
-    }
-    
-    private func performProfileRequest(request: CreateProfileRequest, token: String) {
-        let headers = [
-            "Authorization": "Bearer \(token)",
-            "Content-Type": "application/json"
-        ]
-
-        let userId = currentUser?.id ?? ""
-        let endpoint = APIEndpoint.createProfile(userId: userId)
-
-        networkManager.requestWithHeaders(
-            endpoint: endpoint,
-            body: request,
-            headers: headers,
-            responseType: ProfileResponse.self
-        ) { [weak self] result in
-            DispatchQueue.main.async {
-                self?.setLoading(false)
-                self?.handleProfileResponse(result)
             }
         }
     }
@@ -578,7 +423,7 @@ class AuthViewModel: ObservableObject {
         }
     }
     
-    private func updateCurrentUser(_ user: User) {
+    func updateCurrentUser(_ user: User) {
         storageManager.saveUser(user)
         currentUser = user
         authState = .authenticated(user)
@@ -608,8 +453,6 @@ class AuthViewModel: ObservableObject {
         
         return true
     }
-    
-    
 }
 
 private extension String {
