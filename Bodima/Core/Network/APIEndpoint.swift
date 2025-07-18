@@ -3,6 +3,10 @@ enum APIEndpoint {
     case register
     case createProfile(userId: String)
     case getUserProfile(userId: String)
+    case createHabitation
+    case getHabitationById(habitationId: String)
+    case createLocation
+    case createHabitationFeature(habitationId: String)
 
     var path: String {
         switch self {
@@ -14,14 +18,22 @@ enum APIEndpoint {
             return "/users/\(userId)"
         case .getUserProfile(let userId):
             return "/users/\(userId)"
+        case .createHabitation:
+            return "/habitations"
+        case .getHabitationById(let habitationId):
+            return "/habitations/\(habitationId)"
+        case .createLocation:
+            return "/locations"
+        case .createHabitationFeature(let habitationId):
+            return "/habitation-feature/\(habitationId)"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .login, .register, .createProfile:
+        case .login, .register, .createProfile, .createHabitation, .createLocation, .createHabitationFeature:
             return .POST
-        case .getUserProfile:
+        case .getUserProfile, .getHabitationById:
             return .GET
         }
     }
