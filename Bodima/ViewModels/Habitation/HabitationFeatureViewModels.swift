@@ -109,6 +109,8 @@ enum HabitationFeatureError: Error, LocalizedError {
     }
 }
 
+
+
 // MARK: - HabitationFeatureViewModel
 @MainActor
 class HabitationFeatureViewModel: ObservableObject {
@@ -224,7 +226,7 @@ class HabitationFeatureViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Fetch Features by Habitation ID
+    // MARK: - Fetch Features by Habitation ID (Updated to handle direct data response)
     func fetchFeaturesByHabitationId(habitationId: String) {
         guard !habitationId.isEmpty else {
             showError("Habitation ID is required")
@@ -244,6 +246,7 @@ class HabitationFeatureViewModel: ObservableObject {
             "Content-Type": "application/json"
         ]
         
+        // First try to decode as standard response format
         networkManager.requestWithHeaders(
             endpoint: .getFeaturesByHabitationId(habitationId: habitationId),
             headers: headers,
@@ -265,10 +268,126 @@ class HabitationFeatureViewModel: ObservableObject {
                     }
                     
                 case .failure(let error):
-                    print("🔍 DEBUG - Fetch habitation features error: \(error)")
+                    print("🔍 DEBUG - Standard format failed, trying direct data format")
+                    // If standard format fails, try direct data format
+                    self?.fetchFeaturesByHabitationIdDirectFormat(habitationId: habitationId, headers: headers)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Fetch Features by Habitation ID (Direct Data Format)
+    private func fetchFeaturesByHabitationIdDirectFormat(habitationId: String, headers: [String: String]) {
+        isFetchingFeature = true
+        
+        struct DirectHabitationFeatureResponse: Codable {
+            let success: Bool
+            let data: HabitationFeatureData
+        }
+        
+        networkManager.requestWithHeaders(
+            endpoint: .getFeaturesByHabitationId(habitationId: habitationId),
+            headers: headers,
+            responseType: DirectHabitationFeatureResponse.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isFetchingFeature = false
+                
+                switch result {
+                case .success(let response):
+                    print("🔍 DEBUG - Direct format GetFeaturesByHabitationId success: \(response.success)")
+                    print("🔍 DEBUG - Direct format GetFeaturesByHabitationId data: \(response.data)")
+                    
+                    if response.success {
+                        self?.selectedFeature = response.data
+                        
+                        // Update the features array if this feature isn't already in it
+                        if let index = self?.features.firstIndex(where: { $0.id == response.data.id }) {
+                            self?.features[index] = response.data
+                        } else {
+                            self?.features.append(response.data)
+                        }
+                        
+                        print("✅ Habitation features fetched successfully (direct format)")
+                    } else {
+                        self?.showError("Failed to fetch features")
+                    }
+                    
+                case .failure(let error):
+                    print("🔍 DEBUG - Direct format fetch habitation features error: \(error)")
                     self?.handleNetworkError(error)
                 }
             }
+        }
+    }
+    
+    // MARK: - Fetch All Features for Habitation (Alternative method for arrays)
+    func fetchAllFeaturesByHabitationId(habitationId: String) {
+        guard !habitationId.isEmpty else {
+            showError("Habitation ID is required")
+            return
+        }
+        
+        guard let token = UserDefaults.standard.string(forKey: "auth_token") else {
+            showError("Authentication token not found. Please login again.")
+            return
+        }
+        
+        isFetchingFeature = true
+        clearError()
+        
+        let headers = [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json"
+        ]
+        
+        // Define response type for array of features
+        struct HabitationFeaturesArrayResponse: Codable {
+            let success: Bool
+            let message: String?
+            let data: [HabitationFeatureData]
+        }
+        
+        networkManager.requestWithHeaders(
+            endpoint: .getFeaturesByHabitationId(habitationId: habitationId),
+            headers: headers,
+            responseType: HabitationFeaturesArrayResponse.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isFetchingFeature = false
+                
+                switch result {
+                case .success(let response):
+                    print("🔍 DEBUG - GetAllFeaturesByHabitationId success: \(response.success)")
+                    print("🔍 DEBUG - GetAllFeaturesByHabitationId data count: \(response.data.count)")
+                    
+                    if response.success {
+                        self?.features = response.data
+                        
+                        // Set the first feature as selected if available
+                        if let firstFeature = response.data.first {
+                            self?.selectedFeature = firstFeature
+                        }
+                        
+                        print("✅ All habitation features fetched successfully")
+                    } else {
+                        self?.showError(response.message ?? "Failed to fetch features")
+                    }
+                    
+                case .failure(let error):
+                    print("🔍 DEBUG - Fetch all habitation features error: \(error)")
+                    self?.handleNetworkError(error)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Generic Fetch Method (Handles both single and array responses)
+    func fetchHabitationFeatures(habitationId: String, expectArray: Bool = false) {
+        if expectArray {
+            fetchAllFeaturesByHabitationId(habitationId: habitationId)
+        } else {
+            fetchFeaturesByHabitationId(habitationId: habitationId)
         }
     }
     

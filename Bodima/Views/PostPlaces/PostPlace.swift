@@ -42,7 +42,7 @@ struct PostPlaceView: View {
     @State private var isWashingMachineAvailable = false
     @State private var isWaterAvailable = false
     
-    @State private var monthlyRent = ""
+    @State private var monthlyRent: Int = 0
     @State private var isReserved = false
     
     @State private var isLoading = false
@@ -271,7 +271,7 @@ struct PostPlaceView: View {
         !addressLine01.isEmpty &&
         !city.isEmpty &&
         sqft > 0 &&
-        !monthlyRent.isEmpty &&
+        monthlyRent > 0 &&
         !habitationViewModel.isCreatingHabitation &&
         !habitationLocationViewModel.isCreatingLocation &&
         !habitationFeatureViewModel.isCreatingFeature &&
@@ -359,7 +359,8 @@ struct PostPlaceView: View {
             name: habitationName,
             description: habitationDescription,
             type: selectedHabitationType,
-            isReserved: isReserved
+            isReserved: isReserved,
+            price: monthlyRent
         )
     }
     
@@ -557,7 +558,7 @@ struct PostPlaceView: View {
         isWashingMachineAvailable = false
         isWaterAvailable = false
         
-        monthlyRent = ""
+        monthlyRent = 0
         isReserved = false
         
         isLoading = false
@@ -1208,12 +1209,44 @@ struct AmenitiesCardWidget: View {
 }
 
 // MARK: - Pricing Card Widget
+
 struct PricingCardWidget: View {
-    @Binding var monthlyRent: String
+    @Binding var monthlyRent: Int
     @Binding var isReserved: Bool
     
+    private let currencyFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "LKR"
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        formatter.locale = Locale(identifier: "en_LK")
+        return formatter
+    }()
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        
+        let monthlyRentBinding = Binding<String>(
+            get: {
+               
+                if let formatted = currencyFormatter.string(from: NSNumber(value: monthlyRent)) {
+                   
+                    return formatted.replacingOccurrences(of: "LKR", with: "").trimmingCharacters(in: .whitespaces)
+                }
+                return String(monthlyRent) // Fallback
+            },
+            set: { newValue in
+                
+                let cleanedValue = newValue.replacingOccurrences(of: "[^0-9.]", with: "", options: .regularExpression)
+                
+                if let number = currencyFormatter.number(from: cleanedValue) ?? NumberFormatter().number(from: cleanedValue) {
+                    monthlyRent = Int(number.doubleValue)
+                }
+                
+            }
+        )
+        
+        return VStack(alignment: .leading, spacing: 16) {
             Text("Pricing")
                 .font(.title3.bold())
                 .foregroundStyle(AppColors.foreground)
@@ -1223,7 +1256,7 @@ struct PricingCardWidget: View {
                     .font(.subheadline.bold())
                     .foregroundStyle(AppColors.foreground)
                 
-                TextField("4,500.00", text: $monthlyRent)
+                TextField("4,500.00", text: monthlyRentBinding)
                     .textFieldStyle(CustomTextFieldStyle())
                     .keyboardType(.decimalPad)
             }
