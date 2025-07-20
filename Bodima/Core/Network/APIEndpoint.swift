@@ -11,6 +11,11 @@ enum APIEndpoint {
     case getFeaturesByHabitationId(habitationId: String)
     case createLocation
     case createHabitationFeature(habitationId: String)
+    case createReservation
+    case getReservation(reservationId: String)
+    case createPayement
+    case createStories
+    case getUserStories
 
     var path: String {
         switch self {
@@ -38,14 +43,24 @@ enum APIEndpoint {
             return "/locations/habitation/\(habitationId)"
         case .getFeaturesByHabitationId(let habitationId):
             return "/habitation-feature/\(habitationId)"
+        case .createReservation:
+            return "/reservations"
+        case .getReservation(let reservationId):
+            return "/reservations/\(reservationId)"
+        case .createPayement:
+            return "/payments"
+        case .createStories:
+            return "/user-stories"
+        case .getUserStories:
+            return "/user-stories"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .login, .register, .createProfile, .createHabitation, .createLocation, .createHabitationFeature, .addHabitaionImage:
+        case .login, .register, .createProfile, .createHabitation, .createLocation, .createHabitationFeature, .addHabitaionImage, .createReservation, .createPayement, .createStories:
             return .POST
-        case .getUserProfile, .getHabitationById, .getHabitations, .getLocationByHabitationId, .getFeaturesByHabitationId:
+        case .getUserProfile, .getHabitationById, .getHabitations, .getLocationByHabitationId, .getFeaturesByHabitationId, .getReservation, .getUserStories:
             return .GET
         }
     }
