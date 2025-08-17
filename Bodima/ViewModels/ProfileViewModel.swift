@@ -160,6 +160,8 @@ class ProfileViewModel: ObservableObject {
         }
     }
     
+    
+    
     // MARK: - Update AuthViewModel After Profile Creation
     private func updateAuthViewModelAfterProfileCreation(
         firstName: String,

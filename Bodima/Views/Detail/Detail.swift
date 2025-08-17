@@ -8,6 +8,7 @@ struct DetailView: View {
     @State private var isLiked = false
     @State private var likesCount = 24
     @State private var isFollowing = false
+    @State private var navigateToReserve = false
     @Environment(\.presentationMode) var presentationMode
     
     private var fullAddress: String {
@@ -44,6 +45,7 @@ struct DetailView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    
                     headerView
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
@@ -64,6 +66,13 @@ struct DetailView: View {
             }
             .background(AppColors.background)
             .navigationBarHidden(true)
+            .navigationDestination(isPresented: $navigateToReserve) {
+                ReserveView(
+                    habitation: habitation,
+                    locationData: locationData,
+                    featureData: featureData
+                )
+            }
         }
     }
     
@@ -417,6 +426,7 @@ struct DetailView: View {
                 .foregroundStyle(AppColors.mutedForeground)
             
             Button(action: {
+                navigateToReserve = true
             }) {
                 Text("Reserve Now")
                     .font(.subheadline.bold())

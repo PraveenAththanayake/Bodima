@@ -70,20 +70,37 @@ struct AuthenticationView: View {
 }
 
 // MARK: - Updated SignInView with navigation
-
-
-// MARK: - Main App View
 struct MainAppView: View {
     @StateObject private var authViewModel = AuthViewModel.shared
+    @StateObject private var profileViewModel = ProfileViewModel()
     
     var body: some View {
         TabView {
-            HomeView()
+            HomeView(profileId: profileViewModel.userProfile?.id ?? "")
                 .tabItem {
                     Label("Home", systemImage: "house")
                 }
             
-            // Add other main app tabs here
+            MapView(profileId: profileViewModel.userProfile?.id ?? "")
+                .tabItem {
+                    Label("Map", systemImage: "map")
+                }
+            
+            PostPlaceView()
+                .tabItem {
+                    Label("Post", systemImage: "plus.circle")
+                }
+            
+            ChatView()
+                .tabItem {
+                    Label("Chat", systemImage: "message")
+                }
+            
+            NotificationsView()
+                .tabItem {
+                    Label("Notification", systemImage: "bell")
+                }
+            
             ProfileView()
                 .tabItem {
                     Label("Profile", systemImage: "person.circle")
@@ -94,65 +111,22 @@ struct MainAppView: View {
                     Label("Settings", systemImage: "gear")
                 }
         }
-    }
-}
-
-
-
-// MARK: - Profile View (for main app)
-struct ProfileView: View {
-    @StateObject private var authViewModel = AuthViewModel.shared
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                if let user = authViewModel.currentUser {
-                    VStack(spacing: 10) {
-                        // Profile image placeholder
-                        Circle()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 80, height: 80)
-                            .overlay(
-                                Text(user.username.prefix(1).uppercased())
-                                    .font(.title)
-                                    .foregroundColor(.white)
-                            )
-                        
-                        Text(user.fullName ?? user.username)
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        
-                        Text(user.id ?? "No ID")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-
-                        
-                        Text(user.email)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                }
-                
-                Button(action: {
-                    authViewModel.signOut()
-                }) {
-                    Text("Sign Out")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.red)
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                
-                Spacer()
-            }
-            .navigationTitle("Profile")
+        .onAppear {
+            loadProfileForMainApp()
         }
     }
+    
+    private func loadProfileForMainApp() {
+        guard let userId = authViewModel.currentUser?.id ?? UserDefaults.standard.string(forKey: "user_id") else {
+            return
+        }
+        
+        // Load profile data for MainAppView's ProfileViewModel
+        profileViewModel.fetchUserProfile(userId: userId)
+    }
 }
+
+
 
 // MARK: - Settings View
 struct SettingsView: View {

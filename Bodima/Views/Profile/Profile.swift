@@ -263,7 +263,8 @@ struct ProfileDetailsSectionView: View {
             // Personal Information Card
             ProfileCardView(title: "Personal Information") {
                 VStack(spacing: 12) {
-                    ProfileDetailRow(title: "First Name", value: profile.firstName ?? "Not provided")
+                    ProfileDetailRow(title: "User ID", value: profile.id ?? "Not provided")
+                    
                     ProfileDetailRow(title: "Last Name", value: profile.lastName ?? "Not provided")
                     ProfileDetailRow(title: "Email", value: profile.auth.email)
                     ProfileDetailRow(title: "Phone", value: profile.phoneNumber ?? "Not provided")
