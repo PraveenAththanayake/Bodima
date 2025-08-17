@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct DetailView: View {
     let habitation: EnhancedHabitationData
@@ -298,8 +299,11 @@ struct DetailView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Email")
                     
-                    Button(action: {
-                    }) {
+                    NavigationLink(destination: HabitationChatView(
+                        senderId: UserDefaults.standard.string(forKey: "user_id") ?? "current_user",
+                        receiverId: habitation.user.id,
+                        receiverName: habitation.userFullName
+                    )) {
                         Image(systemName: "message")
                             .font(.system(size: 18))
                             .foregroundStyle(AppColors.mutedForeground)

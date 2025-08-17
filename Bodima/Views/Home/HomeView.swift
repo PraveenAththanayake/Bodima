@@ -41,7 +41,8 @@ struct HomeView: View {
                     },
                     onCreateStoryTap: {
                         showStoryCreation = true
-                    }
+                    },
+                    storiesViewModel: userStoriesViewModel
                 )
             }
             .background(AppColors.background)
@@ -51,7 +52,8 @@ struct HomeView: View {
                     if showStoryOverlay, let story = selectedStory {
                         StoryOverlayView(
                             story: story,
-                            isPresented: $showStoryOverlay
+                            isPresented: $showStoryOverlay,
+                            storiesViewModel: userStoriesViewModel
                         )
                         .transition(.opacity)
                         .animation(.easeInOut(duration: 0.3), value: showStoryOverlay)
@@ -286,6 +288,7 @@ struct MainContentView: View {
     let onFeatureFetch: (String) -> Void
     let onStoryTap: (UserStoryData) -> Void
     let onCreateStoryTap: () -> Void
+    let storiesViewModel: UserStoriesViewModel
     
     var filteredHabitations: [EnhancedHabitationData] {
         if searchText.isEmpty {
@@ -308,7 +311,8 @@ struct MainContentView: View {
                     stories: userStories,
                     isLoading: isStoriesLoading,
                     onStoryTap: onStoryTap,
-                    onCreateStoryTap: onCreateStoryTap
+                    onCreateStoryTap: onCreateStoryTap,
+                    storiesViewModel: storiesViewModel
                 )
                 FeedSection(
                     habitations: filteredHabitations,
@@ -328,6 +332,7 @@ struct StoriesSection: View {
     let isLoading: Bool
     let onStoryTap: (UserStoryData) -> Void
     let onCreateStoryTap: () -> Void
+    let storiesViewModel: UserStoriesViewModel
     
     var body: some View {
         VStack(spacing: 16) {
@@ -336,7 +341,8 @@ struct StoriesSection: View {
                 stories: stories,
                 isLoading: isLoading,
                 onStoryTap: onStoryTap,
-                onCreateStoryTap: onCreateStoryTap
+                onCreateStoryTap: onCreateStoryTap,
+                storiesViewModel: storiesViewModel
             )
         }
         .padding(.bottom, 24)
@@ -375,6 +381,12 @@ struct StoriesScrollView: View {
     let isLoading: Bool
     let onStoryTap: (UserStoryData) -> Void
     let onCreateStoryTap: () -> Void
+    let storiesViewModel: UserStoriesViewModel
+    
+    // Group stories by user ID
+    private var storiesByUser: [String: [UserStoryData]] {
+        Dictionary(grouping: stories) { $0.user.id }
+    }
     
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -387,13 +399,138 @@ struct StoriesScrollView: View {
                 } else if stories.isEmpty {
                     EmptyStoriesView()
                 } else {
-                    ForEach(stories, id: \.id) { story in
-                        StoryView(story: story, onTap: onStoryTap)
+                    // Display one circle per user with their stories
+                    ForEach(Array(storiesByUser.keys), id: \.self) { userId in
+                        if let userStories = storiesByUser[userId], !userStories.isEmpty {
+                            UserStoriesView(
+                                userStories: userStories,
+                                onStoryTap: onStoryTap
+                            )
+                        }
                     }
                 }
             }
             .padding(.horizontal, 20)
         }
+    }
+}
+
+// New component to display all stories from a single user
+struct UserStoriesView: View {
+    let userStories: [UserStoryData]
+    let onStoryTap: (UserStoryData) -> Void
+    @State private var currentStoryIndex = 0
+    
+    private var user: UserStoryUser {
+        userStories.first?.user ?? UserStoryUser(id: "", auth: nil, firstName: nil, lastName: nil, bio: nil, phoneNumber: nil, addressNo: nil, addressLine1: nil, addressLine2: nil, city: nil, district: nil)
+    }
+    
+    var body: some View {
+        Button(action: {
+            onStoryTap(userStories[currentStoryIndex])
+        }) {
+            VStack(spacing: 8) {
+                ZStack {
+                    // Display the current story image
+                    AsyncImage(url: URL(string: userStories[currentStoryIndex].storyImageUrl)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 66, height: 66)
+                            .clipped()
+                    } placeholder: {
+                        Circle()
+                            .fill(AppColors.input)
+                            .frame(width: 66, height: 66)
+                            .overlay(
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            )
+                    }
+                    .clipShape(Circle())
+                    
+                    // Story segments indicator
+                    StorySegmentsIndicator(totalSegments: userStories.count, currentSegment: currentStoryIndex)
+                }
+                
+                Text(getUserDisplayName(from: user))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(AppColors.foreground)
+                    .lineLimit(1)
+                    .frame(width: 76)
+                    .truncationMode(.tail)
+            }
+        }
+        .frame(width: 76)
+        .onAppear {
+            // Reset to first story when view appears
+            currentStoryIndex = 0
+        }
+    }
+    
+    private func getUserDisplayName(from user: UserStoryUser) -> String {
+        if let firstName = user.firstName, !firstName.isEmpty {
+            if let lastName = user.lastName, !lastName.isEmpty {
+                return "\(firstName) \(lastName)"
+            }
+            return firstName
+        }
+        return "User"
+    }
+}
+
+// New component to show the segmented circle indicator for multiple stories
+struct StorySegmentsIndicator: View {
+    let totalSegments: Int
+    let currentSegment: Int
+    
+    var body: some View {
+        Circle()
+            .stroke(
+                LinearGradient(
+                    colors: [AppColors.primary, AppColors.primary.opacity(0.6)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 3
+            )
+            .frame(width: 66, height: 66)
+            .overlay(
+                ZStack {
+                    // Create segment indicators
+                    ForEach(0..<totalSegments, id: \.self) { index in
+                        SegmentArc(
+                            index: index,
+                            total: totalSegments,
+                            isActive: index <= currentSegment
+                        )
+                    }
+                }
+            )
+    }
+}
+
+// Individual segment arc for the story indicator
+struct SegmentArc: View {
+    let index: Int
+    let total: Int
+    let isActive: Bool
+    
+    var body: some View {
+        let angleSize = 360.0 / Double(total)
+        let startAngle = Double(index) * angleSize - 90
+        let endAngle = startAngle + angleSize
+        
+        Path { path in
+            path.addArc(
+                center: CGPoint(x: 33, y: 33),
+                radius: 33,
+                startAngle: .degrees(startAngle),
+                endAngle: .degrees(endAngle - 4), // Gap between segments
+                clockwise: false
+            )
+        }
+        .stroke(isActive ? AppColors.primary : AppColors.mutedForeground, lineWidth: 3)
     }
 }
 
@@ -905,8 +1042,11 @@ struct CreateStoryView: View {
 struct StoryOverlayView: View {
     let story: UserStoryData
     @Binding var isPresented: Bool
+    let storiesViewModel: UserStoriesViewModel
     @State private var progress: Double = 0
     @State private var timer: Timer?
+    @State private var currentStoryIndex: Int = 0
+    @State private var userStories: [UserStoryData] = []
     
     private let storyDuration: Double = 5.0
     
@@ -914,38 +1054,119 @@ struct StoryOverlayView: View {
         ZStack {
             Color.black.opacity(0.95)
                 .ignoresSafeArea()
-                .onTapGesture {
-                    dismissStory()
-                }
+            
+            // Left tap area for previous story
+            HStack {
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .frame(width: UIScreen.main.bounds.width * 0.3)
+                    .onTapGesture {
+                        showPreviousStory()
+                    }
+                
+                Spacer()
+                
+                // Right tap area for next story
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .frame(width: UIScreen.main.bounds.width * 0.3)
+                    .onTapGesture {
+                        showNextStory()
+                    }
+            }
             
             VStack(spacing: 0) {
-                StoryProgressBar(progress: progress)
+                // Progress bars for all stories from this user
+                HStack(spacing: 4) {
+                    ForEach(0..<userStories.count, id: \.self) { index in
+                        StoryProgressBar(
+                            progress: index == currentStoryIndex ? progress : (index < currentStoryIndex ? 1.0 : 0.0)
+                        )
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
                 
                 StoryHeader(
-                    user: story.user,
-                    createdAt: story.createdAt,
+                    user: getCurrentStory().user,
+                    createdAt: getCurrentStory().createdAt,
                     onClose: dismissStory
                 )
                 
                 Spacer()
                 
-                StoryImageView(imageUrl: story.storyImageUrl)
+                StoryImageView(imageUrl: getCurrentStory().storyImageUrl)
                 
                 Spacer()
                 
-                if !story.description.isEmpty {
-                    StoryDescriptionView(description: story.description)
+                if !getCurrentStory().description.isEmpty {
+                    StoryDescriptionView(description: getCurrentStory().description)
                 }
                 
                 Spacer()
             }
         }
         .onAppear {
+            loadUserStories()
             startStoryTimer()
         }
         .onDisappear {
             stopStoryTimer()
         }
+    }
+    
+    // Load all stories from the same user
+    private func loadUserStories() {
+        // Find all stories from the same user
+        let allStories = storiesViewModel.userStories
+        userStories = allStories.filter { $0.user.id == story.user.id }
+        
+        // If no other stories found, just use the current story
+        if userStories.isEmpty {
+            userStories = [story]
+        }
+        
+        // Find the index of the current story
+        if let index = userStories.firstIndex(where: { $0.id == story.id }) {
+            currentStoryIndex = index
+        } else {
+            currentStoryIndex = 0
+        }
+    }
+    
+    // Get the current story being displayed
+    private func getCurrentStory() -> UserStoryData {
+        if userStories.isEmpty {
+            return story
+        }
+        return userStories[currentStoryIndex]
+    }
+    
+    // Show the previous story
+    private func showPreviousStory() {
+        if currentStoryIndex > 0 {
+            currentStoryIndex -= 1
+            resetStoryTimer()
+        }
+    }
+    
+    // Show the next story
+    private func showNextStory() {
+        if currentStoryIndex < userStories.count - 1 {
+            currentStoryIndex += 1
+            resetStoryTimer()
+        } else {
+            // If we're at the last story, dismiss
+            dismissStory()
+        }
+    }
+    
+    private func resetStoryTimer() {
+        stopStoryTimer()
+        progress = 0
+        startStoryTimer()
     }
     
     private func startStoryTimer() {
@@ -954,7 +1175,13 @@ struct StoryOverlayView: View {
             withAnimation(.linear(duration: 0.1)) {
                 progress += 0.1 / storyDuration
                 if progress >= 1.0 {
-                    dismissStory()
+                    // Auto-advance to next story when timer completes
+                    if currentStoryIndex < userStories.count - 1 {
+                        currentStoryIndex += 1
+                        progress = 0
+                    } else {
+                        dismissStory()
+                    }
                 }
             }
         }

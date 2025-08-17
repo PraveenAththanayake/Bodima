@@ -16,6 +16,7 @@ enum APIEndpoint {
     case createPayement
     case createStories
     case getUserStories
+    case sendMessage
 
     var path: String {
         switch self {
@@ -53,12 +54,14 @@ enum APIEndpoint {
             return "/user-stories"
         case .getUserStories:
             return "/user-stories"
+        case .sendMessage:
+            return "/messages"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .login, .register, .createProfile, .createHabitation, .createLocation, .createHabitationFeature, .addHabitaionImage, .createReservation, .createPayement, .createStories:
+        case .login, .register, .createProfile, .createHabitation, .createLocation, .createHabitationFeature, .addHabitaionImage, .createReservation, .createPayement, .createStories, .sendMessage:
             return .POST
         case .getUserProfile, .getHabitationById, .getHabitations, .getLocationByHabitationId, .getFeaturesByHabitationId, .getReservation, .getUserStories:
             return .GET
