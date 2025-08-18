@@ -199,8 +199,10 @@ struct TitleSection: View {
 }
 
 struct NotificationButton: View {
+    @StateObject private var notificationViewModel = NotificationViewModel()
+    
     var body: some View {
-        Button(action: {}) {
+        NavigationLink(destination: NotificationsView()) {
             ZStack {
                 Circle()
                     .fill(AppColors.input)
@@ -213,7 +215,24 @@ struct NotificationButton: View {
                 Image(systemName: "bell")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(AppColors.foreground)
+                
+                // Notification badge
+                if notificationViewModel.unreadCount > 0 {
+                    ZStack {
+                        Circle()
+                            .fill(AppColors.primary)
+                            .frame(width: 18, height: 18)
+                        
+                        Text("\(min(notificationViewModel.unreadCount, 9))")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    .offset(x: 12, y: -12)
+                }
             }
+        }
+        .onAppear {
+            notificationViewModel.fetchNotifications()
         }
     }
 }

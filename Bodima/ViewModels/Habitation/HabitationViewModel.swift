@@ -98,6 +98,8 @@ class HabitationViewModel: ObservableObject {
                         
                         if let newHabitation = response.data {
                             self?.habitations.append(newHabitation)
+                            // Trigger notification for new habitation
+                            self?.triggerHabitationCreatedNotification(habitationName: newHabitation.name)
                         }
                         
                         // Refresh enhanced habitations after creating new one
@@ -598,6 +600,25 @@ extension HabitationViewModel {
                 type: type,
                 isReserved: isReserved,
                 price: price
+            )
+        }
+    }
+    
+    // MARK: - Notification Handling
+    
+    /// Triggers a notification when a new habitation is created
+    func triggerHabitationCreatedNotification(habitationName: String) {
+        print("🔔 Triggering notification for new habitation: \(habitationName)")
+        
+        // In a real implementation, this would be handled by the backend
+        // The notification would be created on the server and then fetched by the client
+        // This is just a placeholder to show where the notification would be triggered
+        
+        // Refresh notifications in the NotificationViewModel if it's active
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            NotificationCenter.default.post(
+                name: NSNotification.Name("RefreshNotifications"),
+                object: nil
             )
         }
     }

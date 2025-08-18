@@ -17,6 +17,8 @@ enum APIEndpoint {
     case createStories
     case getUserStories
     case sendMessage
+    case getNotifications
+    case markNotificationAsRead(notificationId: String)
 
     var path: String {
         switch self {
@@ -56,14 +58,18 @@ enum APIEndpoint {
             return "/user-stories"
         case .sendMessage:
             return "/messages"
+        case .getNotifications:
+            return "/notifications"
+        case .markNotificationAsRead(let notificationId):
+            return "/notifications/\(notificationId)"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .login, .register, .createProfile, .createHabitation, .createLocation, .createHabitationFeature, .addHabitaionImage, .createReservation, .createPayement, .createStories, .sendMessage:
+        case .login, .register, .createProfile, .createHabitation, .createLocation, .createHabitationFeature, .addHabitaionImage, .createReservation, .createPayement, .createStories, .sendMessage, .markNotificationAsRead:
             return .POST
-        case .getUserProfile, .getHabitationById, .getHabitations, .getLocationByHabitationId, .getFeaturesByHabitationId, .getReservation, .getUserStories:
+        case .getUserProfile, .getHabitationById, .getHabitations, .getLocationByHabitationId, .getFeaturesByHabitationId, .getReservation, .getUserStories, .getNotifications:
             return .GET
         }
     }
