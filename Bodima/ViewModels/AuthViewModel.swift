@@ -28,6 +28,28 @@ class AuthViewModel: ObservableObject {
         self.validator = validator
         
         checkAuthStatus()
+        
+        // Start periodic token validation
+        startTokenValidationTimer()
+    }
+    
+    // Timer for periodic token validation
+    private var tokenValidationTimer: Timer?
+    
+    private func startTokenValidationTimer() {
+        // Check token validity every 60 seconds
+        tokenValidationTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
+            self?.validateTokenPeriodically()
+        }
+    }
+    
+    private func validateTokenPeriodically() {
+        // Only check if we're in authenticated state
+        if case .authenticated = authState {
+            if isTokenExpired() {
+                forceSignOut()
+            }
+        }
     }
     
     var isAuthenticated: Bool {
@@ -76,6 +98,13 @@ class AuthViewModel: ObservableObject {
         
         if let user = storageManager.getUser(),
            let token = storageManager.getToken() {
+            // Check if token is valid before setting authenticated state
+            if isTokenExpired(token: token) {
+                // Token is expired, force sign out
+                forceSignOut()
+                return
+            }
+            
             currentUser = user
             jwtToken = token
             
@@ -221,6 +250,10 @@ class AuthViewModel: ObservableObject {
     }
     
     func signOut() {
+        // Invalidate token validation timer
+        tokenValidationTimer?.invalidate()
+        tokenValidationTimer = nil
+        
         storageManager.clearAuthData()
         currentUser = nil
         jwtToken = nil
@@ -329,7 +362,11 @@ class AuthViewModel: ObservableObject {
         }
     }
     
-    private func forceSignOut() {
+    func forceSignOut() {
+        // Invalidate token validation timer
+        tokenValidationTimer?.invalidate()
+        tokenValidationTimer = nil
+        
         storageManager.clearAuthData()
         currentUser = nil
         jwtToken = nil
@@ -433,10 +470,11 @@ class AuthViewModel: ObservableObject {
         
     }
     
-    func isTokenExpired() -> Bool {
-        guard let token = jwtToken else { return true }
+    func isTokenExpired(token: String? = nil) -> Bool {
+        let tokenToCheck = token ?? jwtToken
+        guard let tokenToCheck = tokenToCheck else { return true }
         
-        let components = token.components(separatedBy: ".")
+        let components = tokenToCheck.components(separatedBy: ".")
         guard components.count == 3 else { return true }
         
         let payload = components[1]

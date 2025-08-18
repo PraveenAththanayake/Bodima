@@ -15,15 +15,24 @@ struct ContentView: View {
                 AuthenticationView()
                 
             case .authenticated:
-//                 Check if user needs to complete profile
-                if authViewModel.needsProfileCompletion {
-                    CreateProfileView()
-                } else {
-                    // Show main app content
-                    MainAppView()
+                // Check if token is valid before showing authenticated content
+                Group {
+                    if authViewModel.isTokenExpired() {
+                        // Force logout if token is expired and show authentication view
+                        let _ = DispatchQueue.main.async {
+                            authViewModel.forceSignOut()
+                        }
+                        // Show authentication view while logging out
+                        AuthenticationView()
+                    }
+                    else if authViewModel.needsProfileCompletion {
+                        // Check if user needs to complete profile
+                        CreateProfileView()
+                    } else {
+                        // Show main app content
+                        MainAppView()
+                    }
                 }
-//                MainAppView()
-                 
             }
         }
         .animation(.easeInOut(duration: 0.3), value: authViewModel.authState.id)
@@ -117,6 +126,15 @@ struct MainAppView: View {
     }
     
     private func loadProfileForMainApp() {
+        // Check if token is valid before loading profile
+        if authViewModel.isTokenExpired() {
+            // Force logout if token is expired
+            DispatchQueue.main.async {
+                authViewModel.forceSignOut()
+            }
+            return
+        }
+        
         guard let userId = authViewModel.currentUser?.id ?? UserDefaults.standard.string(forKey: "user_id") else {
             return
         }

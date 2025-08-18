@@ -47,8 +47,9 @@ extension UserDefaultsManager {
     
     func clearAuthData() {
         // Clear all auth related data
-        UserDefaults.standard.removeObject(forKey: "user")
-        UserDefaults.standard.removeObject(forKey: "token")
+        UserDefaults.standard.removeObject(forKey: AuthConstants.userKey)
+        UserDefaults.standard.removeObject(forKey: AuthConstants.tokenKey)
         UserDefaults.standard.removeObject(forKey: "isUserProfileAvailable")
+        UserDefaults.standard.removeObject(forKey: "user_id")
     }
 }

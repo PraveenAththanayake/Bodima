@@ -6,6 +6,26 @@ class NetworkManager {
     
     private init() {}
     
+    // Non-actor-isolated token validation method
+    private func isTokenExpired(token: String) -> Bool {
+        let components = token.components(separatedBy: ".")
+        guard components.count == 3 else { return true }
+        
+        let payload = components[1]
+        guard let data = Data(base64Encoded: payload.base64Padded()) else { return true }
+        
+        do {
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let exp = json["exp"] as? TimeInterval {
+                return Date().timeIntervalSince1970 > exp
+            }
+        } catch {
+            return true
+        }
+        
+        return true
+    }
+    
     // MARK: - GET Request without body
     func request<T: Codable>(
         endpoint: APIEndpoint,
@@ -20,8 +40,17 @@ class NetworkManager {
         var request = URLRequest(url: url)
         request.httpMethod = endpoint.method.rawValue
         
-        // Add auth token if available
+        // Add auth token if available and valid
         if let token = UserDefaults.standard.string(forKey: "auth_token") {
+            // Check if token is expired using a non-actor-isolated method
+            if isTokenExpired(token: token) {
+                // Token is expired, force sign out
+                DispatchQueue.main.async {
+                    AuthViewModel.shared.forceSignOut()
+                }
+                completion(.failure(NetworkError.unauthorized))
+                return
+            }
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
@@ -49,8 +78,17 @@ class NetworkManager {
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        // Add auth token if available
+        // Add auth token if available and valid
         if let token = UserDefaults.standard.string(forKey: "auth_token") {
+            // Check if token is expired using a non-actor-isolated method
+            if isTokenExpired(token: token) {
+                // Token is expired, force sign out
+                DispatchQueue.main.async {
+                    AuthViewModel.shared.forceSignOut()
+                }
+                completion(.failure(NetworkError.unauthorized))
+                return
+            }
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
@@ -261,6 +299,17 @@ enum NetworkError: Error {
         case .unknownError:
             return "Unknown error occurred"
         }
+    }
+}
+
+// Extension for base64 padding
+fileprivate extension String {
+    func base64Padded() -> String {
+        let remainder = self.count % 4
+        if remainder > 0 {
+            return self + String(repeating: "=", count: 4 - remainder)
+        }
+        return self
     }
 }
 
