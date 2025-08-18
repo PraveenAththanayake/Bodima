@@ -4,13 +4,12 @@ import Foundation
 struct NotificationModel: Codable, Identifiable {
     let id: String
     let description: String
-    var isTouched: Bool
+    let isTouched: Bool
     let createdAt: String
     let updatedAt: String
     let isToday: Bool
     let isYesterday: Bool
     let isPast: Bool
-    let v: Int?
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
