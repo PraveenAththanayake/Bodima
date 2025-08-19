@@ -9,6 +9,9 @@ import SwiftUI
 
 @main
 struct BodimaApp: App {
+    // Register AppDelegate for handling push notifications
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     var body: some Scene {
         WindowGroup {
             ContentView()

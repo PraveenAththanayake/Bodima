@@ -1,0 +1,11 @@
+{
+  "Simulator Target Bundle": "chathura.Bodima",
+  "aps": {
+    "alert": {
+      "title": "Hello from Simulator 🎉",
+      "body": "This is a fake push notification"
+    },
+    "badge": 1,
+    "sound": "default"
+  }
+}

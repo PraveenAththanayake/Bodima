@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UserNotifications
 
 @MainActor
 class NotificationViewModel: ObservableObject {    
@@ -13,6 +14,9 @@ class NotificationViewModel: ObservableObject {
             name: NSNotification.Name("RefreshNotifications"),
             object: nil
         )
+        
+        // Initialize when the view model is created
+        fetchNotifications()
     }
     
     @objc private func refreshNotifications() {
