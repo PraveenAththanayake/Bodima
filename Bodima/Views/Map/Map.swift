@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import UIKit
 
 struct MapView: View {
     @StateObject private var habitationViewModel = HabitationViewModel()
@@ -446,15 +447,11 @@ struct HabitationDetailSheet: View {
     @ViewBuilder
     private var headerImage: some View {
         if let pictures = habitation.pictures, !pictures.isEmpty, let firstPicture = pictures.first {
-            AsyncImage(url: URL(string: firstPicture.pictureUrl)) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 200)
-                    .clipped()
-            } placeholder: {
+            CachedImage(url: firstPicture.pictureUrl, contentMode: .fill) {
                 placeholderImage
             }
+            .frame(height: 200)
+            .clipped()
             .cornerRadius(16)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)

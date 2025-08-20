@@ -7,10 +7,14 @@
 
 import UIKit
 import UserNotifications
+import FirebaseCore
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // Configure Firebase
+        FirebaseApp.configure()
+        
         // Request notification permissions
         registerForPushNotifications(application: application)
         

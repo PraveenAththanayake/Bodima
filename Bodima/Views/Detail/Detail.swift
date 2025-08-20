@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Foundation
 
 struct DetailView: View {
@@ -328,21 +329,17 @@ struct DetailView: View {
     private var habitationImageView: some View {
         Group {
             if let pictures = habitation.pictures, !pictures.isEmpty, let firstPicture = pictures.first {
-                AsyncImage(url: URL(string: firstPicture.pictureUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(height: 280)
-                        .clipped()
-                } placeholder: {
+                CachedImage(url: firstPicture.pictureUrl, contentMode: .fill) {
                     RoundedRectangle(cornerRadius: 16)
                         .fill(AppColors.input)
-                        .frame(height: 280)
+                        .frame(width: 350, height: 280)
                         .overlay(
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle())
                         )
                 }
+                .frame(width: 350, height: 280)
+                .clipped()
                 .cornerRadius(16)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
@@ -351,7 +348,7 @@ struct DetailView: View {
             } else {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(AppColors.input)
-                    .frame(height: 280)
+                    .frame(width: 350, height: 280)
                     .overlay(
                         Image(systemName: "photo")
                             .font(.system(size: 44, weight: .light))

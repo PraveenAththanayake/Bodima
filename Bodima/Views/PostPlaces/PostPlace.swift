@@ -2,6 +2,7 @@ import SwiftUI
 import MapKit
 import CoreLocation
 import PhotosUI
+import FirebaseStorage
 
 struct PostPlaceView: View {
     @StateObject private var locationManager = LocationManager()
@@ -322,28 +323,42 @@ struct PostPlaceView: View {
     }
     
     private func uploadImages() {
-        print("🔍 DEBUG - Starting image upload")
+        print("🔍 DEBUG - Starting Firebase image upload")
         isUploadingImages = true
         imageUploadProgress = 0.0
         uploadedImageUrls.removeAll()
         
-        let totalImages = selectedImages.count
+        let storageService = FirebaseStorageService.shared
+        let storagePath = "habitation_images"
         
-        for (index, image) in selectedImages.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.5) {
-                let imageUrl = "https://example.com/images/\(UUID().uuidString).jpg"
-                uploadedImageUrls.append(imageUrl)
-                
-                imageUploadProgress = Double(index + 1) / Double(totalImages)
-                print("🔍 DEBUG - Image upload progress: \(imageUploadProgress)")
-                
-                if uploadedImageUrls.count == totalImages {
-                    print("🔍 DEBUG - All images uploaded, creating habitation")
-                    isUploadingImages = false
-                    createHabitation()
+        storageService.uploadMultipleImages(
+            selectedImages,
+            folderPath: storagePath,
+            progressHandler: { progress in
+                DispatchQueue.main.async {
+                    self.imageUploadProgress = progress
+                    print("🔍 DEBUG - Firebase image upload progress: \(progress)")
+                }
+            },
+            completion: { result in
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(let urls):
+                        self.uploadedImageUrls = urls
+                        print("🔍 DEBUG - All images uploaded to Firebase, creating habitation")
+                        print("🔍 DEBUG - Uploaded URLs: \(urls)")
+                        self.isUploadingImages = false
+                        self.createHabitation()
+                        
+                    case .failure(let error):
+                        print("❌ ERROR - Failed to upload images: \(error.localizedDescription)")
+                        self.showErrorAlert("Failed to upload images: \(error.localizedDescription)")
+                        self.isUploadingImages = false
+                        self.isLoading = false
+                    }
                 }
             }
-        }
+        )
     }
     
     private func createHabitation() {

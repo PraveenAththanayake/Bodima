@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HomeView: View {
     @StateObject private var habitationViewModel = HabitationViewModel()
@@ -694,6 +695,8 @@ struct CreateStoryView: View {
     @State private var selectedImage: UIImage?
     @State private var showImagePicker = false
     @State private var showActionSheet = false
+    @State private var isUploadingImage = false
+    @State private var uploadProgress: Double = 0.0
     
     // Extract gradient as computed property to reduce compiler complexity
     private var backgroundGradient: LinearGradient {
@@ -790,6 +793,8 @@ struct CreateStoryView: View {
                 // Reset form
                 selectedImage = nil
                 description = ""
+                isUploadingImage = false
+                uploadProgress = 0.0
             }
         }
     }
@@ -875,6 +880,22 @@ struct CreateStoryView: View {
                     .cornerRadius(20)
             } else {
                 emptyImagePlaceholder
+            }
+            
+            // Upload progress overlay
+            if isUploadingImage {
+                VStack(spacing: 12) {
+                    ProgressView(value: uploadProgress)
+                        .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                        .frame(width: 200)
+                    
+                    Text("Uploading image... \(Int(uploadProgress * 100))%")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                .padding(20)
+                .background(Color.black.opacity(0.7))
+                .cornerRadius(16)
             }
         }
     }
@@ -965,33 +986,16 @@ struct CreateStoryView: View {
     
     private var postButton: some View {
         Button(action: {
-            if let selectedImage = selectedImage {
-                // Convert image to base64 or upload to server
-                // For now, we'll use a placeholder URL
-                let imageUrl = "https://example.com/images/story1.jpg"
-                // Get user ID from the correct location in your data structure
-                let userIdToUse = getUserId()
-                
-                guard !userIdToUse.isEmpty else {
-                    print("❌ Error: User ID is empty or nil")
-                    return
-                }
-                
-                viewModel.createUserStory(
-                    userId: userIdToUse,
-                    description: description,
-                    storyImageUrl: imageUrl
-                )
-            }
+            createStory()
         }) {
             HStack(spacing: 8) {
-                if viewModel.isCreatingStory {
+                if viewModel.isCreatingStory || isUploadingImage {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.8)
                 }
                 
-                Text(viewModel.isCreatingStory ? "Posting..." : "Post Story")
+                Text(getButtonText())
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.white)
             }
@@ -999,7 +1003,7 @@ struct CreateStoryView: View {
             .frame(height: 56)
             .background(
                 Group {
-                    if canPostStory {
+                    if canPostStory && !isUploadingImage {
                         buttonGradient
                     } else {
                         Color.white.opacity(0.2)
@@ -1013,13 +1017,80 @@ struct CreateStoryView: View {
             )
             .padding(.horizontal, 20)
         }
-        .disabled(!canPostStory || viewModel.isCreatingStory)
-        .scaleEffect(canPostStory ? 1.0 : 0.95)
+        .disabled(!canPostStory || viewModel.isCreatingStory || isUploadingImage)
+        .scaleEffect(canPostStory && !isUploadingImage ? 1.0 : 0.95)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: canPostStory)
     }
     
     private var canPostStory: Bool {
         selectedImage != nil && !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
+    private func getButtonText() -> String {
+        if isUploadingImage {
+            return "Uploading..."
+        } else if viewModel.isCreatingStory {
+            return "Posting..."
+        } else {
+            return "Post Story"
+        }
+    }
+    
+    // MARK: - Story Creation Logic
+    
+    private func createStory() {
+        guard let selectedImage = selectedImage else {
+            print("❌ Error: No image selected")
+            return
+        }
+        
+        guard !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            print("❌ Error: No description provided")
+            return
+        }
+        
+        let userIdToUse = getUserId()
+        guard !userIdToUse.isEmpty else {
+            print("❌ Error: User ID is empty or nil")
+            return
+        }
+        
+        // Start the upload process
+        uploadImageAndCreateStory(image: selectedImage, userId: userIdToUse)
+    }
+    
+    private func uploadImageAndCreateStory(image: UIImage, userId: String) {
+        isUploadingImage = true
+        uploadProgress = 0.0
+        
+        // Upload image to Firebase Storage
+        FirebaseStorageService.shared.uploadImage(
+            image,
+            folderPath: "story_images",
+            filename: "story_\(userId)_\(Date().timeIntervalSince1970)"
+        ) { result in
+            DispatchQueue.main.async {
+                self.isUploadingImage = false
+                self.uploadProgress = 1.0
+                
+                switch result {
+                case .success(let imageUrl):
+                    print("✅ Image uploaded successfully: \(imageUrl)")
+                    
+                    // Create the story with the uploaded image URL
+                    self.viewModel.createUserStory(
+                        userId: userId,
+                        description: self.description,
+                        storyImageUrl: imageUrl
+                    )
+                    
+                case .failure(let error):
+                    print("❌ Failed to upload image: \(error.localizedDescription)")
+                    self.viewModel.storyCreationMessage = "Failed to upload image: \(error.localizedDescription)"
+                    self.viewModel.storyCreationSuccess = false
+                }
+            }
+        }
     }
     
     // MARK: - Helper Methods
@@ -1338,12 +1409,7 @@ struct StoryImageView: View {
     let imageUrl: String
     
     var body: some View {
-        AsyncImage(url: URL(string: imageUrl)) { image in
-            image
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(maxHeight: UIScreen.main.bounds.height * 0.6)
-        } placeholder: {
+        CachedImage(url: imageUrl, contentMode: .fit) {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.white.opacity(0.1))
                 .frame(height: 300)
@@ -1352,6 +1418,7 @@ struct StoryImageView: View {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                 )
         }
+        .frame(maxHeight: UIScreen.main.bounds.height * 0.6)
         .cornerRadius(12)
         .padding(.horizontal, 16)
     }
@@ -1592,21 +1659,17 @@ struct HabitationImage: View {
     
     var body: some View {
         if let pictures = pictures, !pictures.isEmpty, let firstPicture = pictures.first {
-            AsyncImage(url: URL(string: firstPicture.pictureUrl)) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 280)
-                    .clipped()
-            } placeholder: {
+            CachedImage(url: firstPicture.pictureUrl, contentMode: .fill) {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(AppColors.input)
-                    .frame(height: 280)
+                    .frame(width: 320, height: 280)
                     .overlay(
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
                     )
             }
+            .frame(width: 320, height: 280)
+            .clipped()
             .cornerRadius(16)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
@@ -1616,7 +1679,7 @@ struct HabitationImage: View {
         } else {
             RoundedRectangle(cornerRadius: 16)
                 .fill(AppColors.input)
-                .frame(height: 280)
+                .frame(width: 320, height: 280)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(AppColors.border, lineWidth: 1)

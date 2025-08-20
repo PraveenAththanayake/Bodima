@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ReserveView: View {
     let habitation: EnhancedHabitationData
@@ -104,12 +105,8 @@ struct ReserveView: View {
             
             HStack(spacing: 12) {
                 Group {
-                    if let imageURL = propertyImageURL, let url = URL(string: imageURL) {
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
+                    if let imageURL = propertyImageURL {
+                        CachedImage(url: imageURL, contentMode: .fill) {
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(AppColors.input)
                                 .overlay(

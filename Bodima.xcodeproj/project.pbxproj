@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		ACAFA0072E54EB02003B9853 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = ACAFA0062E54EB02003B9853 /* FirebaseCore */; };
+		ACAFA0092E54EB02003B9853 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = ACAFA0082E54EB02003B9853 /* FirebaseStorage */; };
+		ACAFA00B2E54EB02003B9853 /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = ACAFA00A2E54EB02003B9853 /* FirebaseStorageCombine-Community */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		ACF5328F2E23813800BDFC2E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +58,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ACAFA0072E54EB02003B9853 /* FirebaseCore in Frameworks */,
+				ACAFA00B2E54EB02003B9853 /* FirebaseStorageCombine-Community in Frameworks */,
+				ACAFA0092E54EB02003B9853 /* FirebaseStorage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +121,9 @@
 			);
 			name = Bodima;
 			packageProductDependencies = (
+				ACAFA0062E54EB02003B9853 /* FirebaseCore */,
+				ACAFA0082E54EB02003B9853 /* FirebaseStorage */,
+				ACAFA00A2E54EB02003B9853 /* FirebaseStorageCombine-Community */,
 			);
 			productName = Bodima;
 			productReference = ACF532812E23813600BDFC2E /* Bodima.app */;
@@ -195,6 +207,9 @@
 			);
 			mainGroup = ACF532782E23813600BDFC2E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				ACAFA0052E54EB02003B9853 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = ACF532822E23813600BDFC2E /* Products */;
 			projectDirPath = "";
@@ -554,6 +569,35 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		ACAFA0052E54EB02003B9853 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		ACAFA0062E54EB02003B9853 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ACAFA0052E54EB02003B9853 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		ACAFA0082E54EB02003B9853 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ACAFA0052E54EB02003B9853 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		ACAFA00A2E54EB02003B9853 /* FirebaseStorageCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ACAFA0052E54EB02003B9853 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseStorageCombine-Community";
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = ACF532792E23813600BDFC2E /* Project object */;
 }
