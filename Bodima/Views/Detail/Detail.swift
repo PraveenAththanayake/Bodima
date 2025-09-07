@@ -14,7 +14,13 @@ struct DetailView: View {
     @Environment(\.presentationMode) var presentationMode
     
     private var fullAddress: String {
-        guard let location = locationData else { return "\(habitation.user.city), \(habitation.user.district)" }
+        guard let location = locationData else { 
+            if let user = habitation.user {
+                return "\(user.city), \(user.district)" 
+            } else {
+                return "Unknown location"
+            }
+        }
         return "\(location.addressNo), \(location.addressLine01), \(location.city), \(location.district)"
     }
     
@@ -40,7 +46,11 @@ struct DetailView: View {
     }
     
     private var userInitials: String {
-        return String(habitation.user.firstName.prefix(1)) + String(habitation.user.lastName.prefix(1))
+        if let user = habitation.user {
+            return String(user.firstName.prefix(1)) + String(user.lastName.prefix(1))
+        } else {
+            return "?"
+        }
     }
     
     var body: some View {
@@ -129,12 +139,18 @@ struct DetailView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(habitation.userFullName)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(AppColors.foreground)
-                    
-                    Text("@\(habitation.user.auth) • \(formattedTime)")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(AppColors.foreground)
+                
+                if let user = habitation.user {
+                    Text("@\(user.auth) • \(formattedTime)")
                         .font(.caption)
                         .foregroundStyle(AppColors.mutedForeground)
+                } else {
+                    Text("• \(formattedTime)")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.mutedForeground)
+                }
                 }
                 
                 Spacer()
@@ -300,15 +316,7 @@ struct DetailView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Email")
                     
-                    NavigationLink(destination: HabitationChatView(
-                        senderId: UserDefaults.standard.string(forKey: "user_id") ?? "current_user",
-                        receiverId: habitation.user.id,
-                        receiverName: habitation.userFullName
-                    )) {
-                        Image(systemName: "message")
-                            .font(.system(size: 18))
-                            .foregroundStyle(AppColors.mutedForeground)
-                    }
+                 
                     .buttonStyle(.plain)
                     .accessibilityLabel("Message")
                 }

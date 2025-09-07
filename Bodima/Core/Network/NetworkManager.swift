@@ -163,7 +163,7 @@ class NetworkManager {
         }.resume()
     }
     
-    // MARK: - GET Request with custom headers
+    // MARK: - GET Request with custom headers(to use jWt token)
     func requestWithHeaders<T: Codable>(
         endpoint: APIEndpoint,
         headers: [String: String],

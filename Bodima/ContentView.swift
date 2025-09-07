@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @StateObject private var authViewModel = AuthViewModel.shared
@@ -100,6 +101,11 @@ struct MainAppView: View {
                     Label("Post", systemImage: "plus.circle")
                 }
             
+            MyHabitationsView()
+                .tabItem {
+                    Label("My Places", systemImage: "house.fill")
+                }
+            
             ChatView()
                 .tabItem {
                     Label("Chat", systemImage: "message")
@@ -113,11 +119,6 @@ struct MainAppView: View {
             ProfileView()
                 .tabItem {
                     Label("Profile", systemImage: "person.circle")
-                }
-            
-            SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gear")
                 }
         }
         .onAppear {

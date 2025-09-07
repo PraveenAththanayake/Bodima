@@ -30,6 +30,162 @@ class HabitationViewModel: ObservableObject {
     
     // MARK: - Original Methods (UNCHANGED)
     
+    // MARK: - Update and Delete Methods
+    
+    func updateHabitation(
+        habitationId: String,
+        name: String,
+        description: String,
+        type: HabitationType,
+        isReserved: Bool = false,
+        price: Int
+    ) {
+        guard !habitationId.isEmpty else {
+            showError("Habitation ID is required")
+            return
+        }
+        
+        guard !name.isEmpty else {
+            showError("Habitation name is required")
+            return
+        }
+        
+        guard !description.isEmpty else {
+            showError("Description is required")
+            return
+        }
+        
+        guard let token = UserDefaults.standard.string(forKey: "auth_token") else {
+            showError("Authentication token not found. Please login again.")
+            return
+        }
+        
+        isLoading = true
+        clearError()
+        
+        // Get the current user ID
+        var userId = ""
+        if let currentUserId = AuthViewModel.shared.currentUser?.id ?? UserDefaults.standard.string(forKey: "user_id") {
+            userId = currentUserId
+        }
+        
+        let updateHabitationRequest = CreateHabitationRequest(
+            user: userId, // Include the user ID for update
+            name: name,
+            description: description,
+            type: type.rawValue,
+            isReserved: isReserved,
+            price: price
+        )
+        
+        let headers = [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json"
+        ]
+        
+        networkManager.requestWithHeaders(
+            endpoint: .updateHabitation(habitationId: habitationId),
+            body: updateHabitationRequest,
+            headers: headers,
+            responseType: CreateHabitationResponse.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                switch result {
+                case .success(let response):
+                    print("🔍 DEBUG - UpdateHabitation success: \(response.success)")
+                    print("🔍 DEBUG - UpdateHabitation message: \(response.message)")
+                    
+                    if response.success {
+                        // Update the habitation in the arrays
+                        if let updatedHabitation = response.data {
+                            // Update in habitations array
+                            if let index = self?.habitations.firstIndex(where: { $0.id == habitationId }) {
+                                self?.habitations[index] = updatedHabitation
+                            }
+                            
+                            // Refresh enhanced habitations
+                            self?.fetchAllEnhancedHabitations()
+                            
+                            // Update selected habitation if it's the one being edited
+                            if self?.selectedHabitation?.id == habitationId {
+                                self?.selectedHabitation = updatedHabitation
+                            }
+                        }
+                        
+                        self?.showSuccess(message: "Habitation updated successfully")
+                    } else {
+                        self?.showError(response.message)
+                    }
+                    
+                case .failure(let error):
+                    print("🔍 DEBUG - Update habitation error: \(error)")
+                    self?.handleNetworkError(error)
+                }
+            }
+        }
+    }
+    
+    func deleteHabitation(habitationId: String) {
+        guard !habitationId.isEmpty else {
+            showError("Habitation ID is required")
+            return
+        }
+        
+        guard let token = UserDefaults.standard.string(forKey: "auth_token") else {
+            showError("Authentication token not found. Please login again.")
+            return
+        }
+        
+        isLoading = true
+        clearError()
+        
+        let headers = [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json"
+        ]
+        
+        networkManager.requestWithHeaders(
+            endpoint: .deleteHabitation(habitationId: habitationId),
+            headers: headers,
+            responseType: DeleteHabitationResponse.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                switch result {
+                case .success(let response):
+                    print("🔍 DEBUG - DeleteHabitation success: \(response.success)")
+                    print("🔍 DEBUG - DeleteHabitation message: \(response.message)")
+                    
+                    if response.success {
+                        // Remove the habitation from the arrays
+                        self?.habitations.removeAll { $0.id == habitationId }
+                        self?.enhancedHabitations.removeAll { $0.id == habitationId }
+                        
+                        // Reset selected habitation if it's the one being deleted
+                        if self?.selectedHabitation?.id == habitationId {
+                            self?.selectedHabitation = nil
+                        }
+                        
+                        if self?.selectedEnhancedHabitation?.id == habitationId {
+                            self?.selectedEnhancedHabitation = nil
+                        }
+                        
+                        self?.showSuccess(message: "Habitation deleted successfully")
+                    } else {
+                        self?.showError(response.message)
+                    }
+                    
+                case .failure(let error):
+                    print("🔍 DEBUG - Delete habitation error: \(error)")
+                    self?.handleNetworkError(error)
+                }
+            }
+        }
+    }
+    
     func createHabitation(
         profileUserId: String,
         name: String,
@@ -242,7 +398,11 @@ class HabitationViewModel: ObservableObject {
                         self?.enhancedHabitations.forEach { habitation in
                             print("📍 Enhanced Habitation: \(habitation.name) - Type: \(habitation.type)")
                             print("   User: \(habitation.userFullName)")
-                            print("   City: \(habitation.user.city), District: \(habitation.user.district)")
+                            if let user = habitation.user {
+                                print("   City: \(user.city), District: \(user.district)")
+                            } else {
+                                print("   City: Unknown, District: Unknown")
+                            }
                             print("   Pictures: \(habitation.pictures?.count ?? 0)")
                             print("   Reserved: \(habitation.isReserved)")
                             print("   Price: \(habitation.price)")
@@ -298,7 +458,11 @@ class HabitationViewModel: ObservableObject {
                         if let habitation = response.data {
                             print("📍 Selected Enhanced Habitation: \(habitation.name)")
                             print("   User: \(habitation.userFullName)")
-                            print("   City: \(habitation.user.city), District: \(habitation.user.district)")
+                            if let user = habitation.user {
+                                print("   City: \(user.city), District: \(user.district)")
+                            } else {
+                                print("   City: Unknown, District: Unknown")
+                            }
                             print("   Pictures: \(habitation.pictures?.count ?? 0)")
                         }
                     } else {
@@ -342,15 +506,21 @@ class HabitationViewModel: ObservableObject {
     }
     
     func filterEnhancedHabitationsByUser(userId: String) -> [EnhancedHabitationData] {
-        return enhancedHabitations.filter { $0.user.id == userId }
+        return enhancedHabitations.filter { $0.user?.id == userId }
     }
     
     func filterEnhancedHabitationsByCity(_ city: String) -> [EnhancedHabitationData] {
-        return enhancedHabitations.filter { $0.user.city.lowercased().contains(city.lowercased()) }
+        return enhancedHabitations.filter { habitation in
+            guard let user = habitation.user else { return false }
+            return user.city.lowercased().contains(city.lowercased())
+        }
     }
     
     func filterEnhancedHabitationsByDistrict(_ district: String) -> [EnhancedHabitationData] {
-        return enhancedHabitations.filter { $0.user.district.lowercased().contains(district.lowercased()) }
+        return enhancedHabitations.filter { habitation in
+            guard let user = habitation.user else { return false }
+            return user.district.lowercased().contains(district.lowercased())
+        }
     }
     
     func searchEnhancedHabitations(query: String) -> [EnhancedHabitationData] {
@@ -358,12 +528,17 @@ class HabitationViewModel: ObservableObject {
         
         let lowercasedQuery = query.lowercased()
         return enhancedHabitations.filter { habitation in
-            habitation.name.lowercased().contains(lowercasedQuery) ||
-            habitation.description.lowercased().contains(lowercasedQuery) ||
-            habitation.type.lowercased().contains(lowercasedQuery) ||
-            habitation.userFullName.lowercased().contains(lowercasedQuery) ||
-            habitation.user.city.lowercased().contains(lowercasedQuery) ||
-            habitation.user.district.lowercased().contains(lowercasedQuery)
+            // Basic properties that don't depend on user
+            let basicMatch = habitation.name.lowercased().contains(lowercasedQuery) ||
+                           habitation.description.lowercased().contains(lowercasedQuery) ||
+                           habitation.type.lowercased().contains(lowercasedQuery) ||
+                           habitation.userFullName.lowercased().contains(lowercasedQuery)
+            
+            // User-dependent properties
+            let userMatch = habitation.user?.city.lowercased().contains(lowercasedQuery) == true ||
+                          habitation.user?.district.lowercased().contains(lowercasedQuery) == true
+            
+            return basicMatch || userMatch
         }
     }
     
@@ -371,14 +546,16 @@ class HabitationViewModel: ObservableObject {
         var filteredHabitations = enhancedHabitations
         
         if let city = city, !city.isEmpty {
-            filteredHabitations = filteredHabitations.filter {
-                $0.user.city.lowercased().contains(city.lowercased())
+            filteredHabitations = filteredHabitations.filter { habitation in
+                guard let user = habitation.user else { return false }
+                return user.city.lowercased().contains(city.lowercased())
             }
         }
         
         if let district = district, !district.isEmpty {
-            filteredHabitations = filteredHabitations.filter {
-                $0.user.district.lowercased().contains(district.lowercased())
+            filteredHabitations = filteredHabitations.filter { habitation in
+                guard let user = habitation.user else { return false }
+                return user.district.lowercased().contains(district.lowercased())
             }
         }
         
@@ -420,12 +597,12 @@ class HabitationViewModel: ObservableObject {
     }
     
     var uniqueCities: [String] {
-        let cities = Set(enhancedHabitations.map { $0.user.city })
+        let cities = Set(enhancedHabitations.compactMap { $0.user?.city })
         return Array(cities).sorted()
     }
     
     var uniqueDistricts: [String] {
-        let districts = Set(enhancedHabitations.map { $0.user.district })
+        let districts = Set(enhancedHabitations.compactMap { $0.user?.district })
         return Array(districts).sorted()
     }
     
@@ -435,6 +612,11 @@ class HabitationViewModel: ObservableObject {
     }
     
     // MARK: - Helper Methods
+    
+    func showSuccess(message: String) {
+        self.habitationCreationSuccess = true
+        self.habitationCreationMessage = message
+    }
     
     func getUserIdFromProfile(completion: @escaping (String?) -> Void) {
         guard let userId = AuthViewModel.shared.currentUser?.id ?? UserDefaults.standard.string(forKey: "user_id") else {

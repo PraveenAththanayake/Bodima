@@ -6,6 +6,7 @@ class UserDefaultsManager {
     
     private init() {}
     
+    
     func saveToken(_ token: String) {
         userDefaults.set(token, forKey: AuthConstants.tokenKey)
     }

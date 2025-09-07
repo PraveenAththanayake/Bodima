@@ -514,9 +514,15 @@ struct HabitationDetailSheet: View {
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.mutedForeground)
             
-            Text("\(habitation.user.city), \(habitation.user.district)")
-                .font(.subheadline)
-                .foregroundStyle(AppColors.mutedForeground)
+            if let user = habitation.user {
+                Text("\(user.city), \(user.district)")
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.mutedForeground)
+            } else {
+                Text("Unknown location")
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.mutedForeground)
+            }
             
             Spacer()
             
@@ -551,37 +557,59 @@ struct HabitationDetailSheet: View {
                 .font(.headline)
                 .foregroundStyle(AppColors.foreground)
             
-            HStack {
-                userAvatar
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(habitation.user.firstName) \(habitation.user.lastName)")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(AppColors.foreground)
+            if let user = habitation.user {
+                HStack {
+                    userAvatar
                     
-                    Text("@\(habitation.user.auth)")
-                        .font(.caption)
-                        .foregroundStyle(AppColors.mutedForeground)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(user.firstName) \(user.lastName)")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(AppColors.foreground)
+                        
+                        Text("@\(user.auth)")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.mutedForeground)
+                    }
+                    
+                    Spacer()
                 }
-                
-                Spacer()
+            } else {
+                Text("Unknown host")
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.mutedForeground)
             }
         }
     }
     
+    @ViewBuilder
     private var userAvatar: some View {
-        Circle()
-            .fill(AppColors.input)
-            .frame(width: 44, height: 44)
-            .overlay(
-                Circle()
-                    .stroke(AppColors.border, lineWidth: 1)
-            )
-            .overlay(
-                Text(String(habitation.user.firstName.prefix(1)) + String(habitation.user.lastName.prefix(1)))
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(AppColors.foreground)
-            )
+        if let user = habitation.user {
+            Circle()
+                .fill(AppColors.input)
+                .frame(width: 44, height: 44)
+                .overlay(
+                    Circle()
+                        .stroke(AppColors.border, lineWidth: 1)
+                )
+                .overlay(
+                    Text(String(user.firstName.prefix(1)) + String(user.lastName.prefix(1)))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(AppColors.foreground)
+                )
+        } else {
+            Circle()
+                .fill(AppColors.input)
+                .frame(width: 44, height: 44)
+                .overlay(
+                    Circle()
+                        .stroke(AppColors.border, lineWidth: 1)
+                )
+                .overlay(
+                    Text("?")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(AppColors.foreground)
+                )
+        }
     }
     
     @ViewBuilder

@@ -81,7 +81,7 @@ struct HabitationPicture: Codable, Identifiable {
 
 struct EnhancedHabitationData: Codable, Identifiable {
     let id: String
-    let user: EnhancedUserData
+    let user: EnhancedUserData?
     let name: String
     let description: String
     let type: String
@@ -99,8 +99,27 @@ struct EnhancedHabitationData: Codable, Identifiable {
         case price
     }
     
+    // Custom decoding to handle null user field
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decode(String.self, forKey: .description)
+        type = try container.decode(String.self, forKey: .type)
+        isReserved = try container.decode(Bool.self, forKey: .isReserved)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        updatedAt = try container.decode(String.self, forKey: .updatedAt)
+        v = try container.decode(Int.self, forKey: .v)
+        price = try container.decode(Int.self, forKey: .price)
+        pictures = try container.decodeIfPresent([HabitationPicture].self, forKey: .pictures)
+        
+        // Handle null user field
+        user = try container.decodeIfPresent(EnhancedUserData.self, forKey: .user)
+    }
+    
     var userFullName: String {
-        return "\(user.firstName) \(user.lastName)"
+        return user != nil ? "\(user!.firstName) \(user!.lastName)" : "Unknown User"
     }
     
     var mainPictureUrl: String? {
@@ -112,7 +131,7 @@ struct EnhancedHabitationData: Codable, Identifiable {
     }
     
     var userIdString: String {
-        return user.id
+        return user?.id ?? ""
     }
 }
 

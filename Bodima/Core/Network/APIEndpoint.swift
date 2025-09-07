@@ -4,6 +4,8 @@ enum APIEndpoint {
     case createProfile(userId: String)
     case getUserProfile(userId: String)
     case createHabitation
+    case updateHabitation(habitationId: String)
+    case deleteHabitation(habitationId: String)
     case addHabitaionImage(habitationId: String)
     case getHabitations
     case getLocationByHabitationId(habitationId: String)
@@ -32,6 +34,10 @@ enum APIEndpoint {
             return "/users/\(userId)"
         case .createHabitation:
             return "/habitations"
+        case .updateHabitation(let habitationId):
+            return "/habitations/\(habitationId)"
+        case .deleteHabitation(let habitationId):
+            return "/habitations/\(habitationId)"
         case .addHabitaionImage(let habitationId):
             return "/habitations/\(habitationId)/pictures"
         case .getHabitationById(let habitationId):
@@ -71,6 +77,10 @@ enum APIEndpoint {
             return .POST
         case .getUserProfile, .getHabitationById, .getHabitations, .getLocationByHabitationId, .getFeaturesByHabitationId, .getReservation, .getUserStories, .getNotifications:
             return .GET
+        case .updateHabitation:
+            return .PUT
+        case .deleteHabitation:
+            return .DELETE
         }
     }
 }
