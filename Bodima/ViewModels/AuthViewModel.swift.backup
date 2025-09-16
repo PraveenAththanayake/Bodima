@@ -134,14 +134,13 @@ class AuthViewModel: ObservableObject {
             return
         }
         
-        let endpoint = APIEndpoint.getUserProfile(userId: userId)
+        let endpoint = APIEndpoint.getUserProfileByAuth(authId: userId)
         let headers = ["Authorization": "Bearer \(token)"]
         
-        networkManager.requestWithHeaders(
+        self.networkManager.requestWithHeaders(
             endpoint: endpoint,
-            body: nil as String?,
             headers: headers,
-            responseType: ProfileResponse.self
+            responseType: UserProfile.self
         ) { [weak self] result in
             DispatchQueue.main.async {
                 self?.handleProfileCheckResponse(result)
@@ -149,46 +148,40 @@ class AuthViewModel: ObservableObject {
         }
     }
 
-    private func handleProfileCheckResponse(_ result: Result<ProfileResponse, Error>) {
+    private func handleProfileCheckResponse(_ result: Result<UserProfile, Error>) {
         profileCheckCompleted = true
         
         switch result {
-        case .success(let response):
-            if response.success, let profileData = response.data {
-                isUserProfileAvailable = true
-                storageManager.saveUserProfileAvailability(true)
+        case .success(let userProfile):
+            isUserProfileAvailable = true
+            storageManager.saveUserProfileAvailability(true)
+            
+            if var user = currentUser {
+                // Update user with profile data
+                user.hasCompletedProfile = true
+                user.firstName = userProfile.firstName
+                user.lastName = userProfile.lastName
+                user.bio = userProfile.bio
+                user.phoneNumber = userProfile.phoneNumber
+                user.addressNo = userProfile.addressNo
+                user.addressLine1 = userProfile.addressLine1
+                user.addressLine2 = userProfile.addressLine2
+                user.city = userProfile.city
+                user.district = userProfile.district
+                user.profileImageURL = userProfile.profileImageURL
+                user.createdAt = userProfile.createdAt
+                user.updatedAt = userProfile.updatedAt
                 
-                if var user = currentUser {
-                    // Update user with all profile data
-                    user.hasCompletedProfile = true
-                    user.firstName = profileData.firstName
-                    user.lastName = profileData.lastName
-                    user.bio = profileData.bio
-                    user.phoneNumber = profileData.phoneNumber
-                    user.addressNo = profileData.addressNo
-                    user.addressLine1 = profileData.addressLine1
-                    user.addressLine2 = profileData.addressLine2
-                    user.city = profileData.city
-                    user.district = profileData.district
-                    user.profileImageURL = profileData.profileImageURL
-                    user.createdAt = profileData.createdAt
-                    user.updatedAt = profileData.updatedAt
-                    
-                    // Update email and username from auth data if available
-                    user.email = profileData.auth.email
-                    user.username = profileData.auth.username
-                    user.id = profileData.id
-                    
-                    updateCurrentUser(user)
-                }
-            } else {
-                isUserProfileAvailable = false
-                storageManager.saveUserProfileAvailability(false)
-                if var user = currentUser {
-                    user.hasCompletedProfile = false
-                    updateCurrentUser(user)
-                }
+                updateCurrentUser(user)
             }
+        } else {
+            isUserProfileAvailable = false
+            storageManager.saveUserProfileAvailability(false)
+            if var user = currentUser {
+                user.hasCompletedProfile = false
+                updateCurrentUser(user)
+            }
+        }
         case .failure(let error):
             let errorString = error.localizedDescription
             
@@ -234,7 +227,6 @@ class AuthViewModel: ObservableObject {
     
     // MARK: - Biometric Authentication
     func signInWithBiometric(token: String) {
-        // Validate token before proceeding
         guard !token.isEmpty, token.count > 10 else {
             showAlert(.error("Invalid authentication token"))
             return
@@ -245,9 +237,8 @@ class AuthViewModel: ObservableObject {
         // Verify the token with the backend
         let headers = ["Authorization": "Bearer \(token)"]
         
-        networkManager.requestWithHeaders(
-            endpoint: .verifyToken,
-            body: nil as String?,
+        self.networkManager.requestWithHeaders(
+            endpoint: APIEndpoint.verifyToken,
             headers: headers,
             responseType: TokenVerificationResponse.self
         ) { [weak self] result in

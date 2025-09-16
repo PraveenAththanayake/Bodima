@@ -205,6 +205,91 @@ class ProfileViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Update Profile
+    func updateProfile(
+        userId: String,
+        firstName: String,
+        lastName: String,
+        profileImageURL: String,
+        bio: String,
+        phoneNumber: String,
+        addressNo: String,
+        addressLine1: String,
+        addressLine2: String,
+        city: String,
+        district: String,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
+        guard !userId.isEmpty else {
+            completion(false, "User ID is required")
+            return
+        }
+        
+        guard let token = UserDefaults.standard.string(forKey: "auth_token") else {
+            completion(false, "Authentication token not found. Please login again.")
+            return
+        }
+        
+        let updateProfileRequest = UpdateProfileRequest(
+            firstName: firstName,
+            lastName: lastName,
+            profileImageURL: profileImageURL,
+            bio: bio,
+            phoneNumber: phoneNumber,
+            addressNo: addressNo,
+            addressLine1: addressLine1,
+            addressLine2: addressLine2,
+            city: city,
+            district: district
+        )
+        
+        let headers = [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json"
+        ]
+        
+        networkManager.requestWithHeaders(
+            endpoint: .updateProfile(userId: userId),
+            body: updateProfileRequest,
+            headers: headers,
+            responseType: UpdateProfileResponse.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    print("🔍 DEBUG - UpdateProfile success: \(response.success)")
+                    print("🔍 DEBUG - UpdateProfile message: \(response.message)")
+                    
+                    if response.success {
+                        print("✅ Profile updated successfully")
+                        // Refresh the profile data after successful update
+                        self?.fetchUserProfile(userId: userId)
+                        completion(true, response.message)
+                    } else {
+                        completion(false, response.message)
+                    }
+                    
+                case .failure(let error):
+                    print("🔍 DEBUG - Update profile error: \(error)")
+                    if let networkError = error as? NetworkError {
+                        switch networkError {
+                        case .unauthorized:
+                            completion(false, "Session expired. Please login again.")
+                        case .clientError(let message):
+                            completion(false, message)
+                        case .serverError(let message):
+                            completion(false, "Server error: \(message)")
+                        default:
+                            completion(false, networkError.localizedDescription)
+                        }
+                    } else {
+                        completion(false, "Network error: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+    
     // MARK: - Refresh Profile
     func refreshProfile(userId: String) {
         fetchUserProfile(userId: userId)

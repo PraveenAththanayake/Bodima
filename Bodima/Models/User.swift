@@ -111,6 +111,7 @@ struct ProfileData: Codable {
     let createdAt: String?
     let updatedAt: String?
     let profileImageUrl: String?
+    let accessibilitySettings: AccessibilitySettings?
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -128,6 +129,36 @@ struct ProfileData: Codable {
         case createdAt
         case updatedAt
         case profileImageUrl
+        case accessibilitySettings
+    }
+}
+
+// MARK: - Accessibility Settings
+struct AccessibilitySettings: Codable, Equatable {
+    var largeText: Bool
+    var highContrast: Bool
+    var voiceOver: Bool
+    var reduceMotion: Bool
+    var screenReader: Bool
+    var colorBlindAssist: Bool
+    var hapticFeedback: Bool
+    
+    init(
+        largeText: Bool = false,
+        highContrast: Bool = false,
+        voiceOver: Bool = false,
+        reduceMotion: Bool = false,
+        screenReader: Bool = false,
+        colorBlindAssist: Bool = false,
+        hapticFeedback: Bool = true
+    ) {
+        self.largeText = largeText
+        self.highContrast = highContrast
+        self.voiceOver = voiceOver
+        self.reduceMotion = reduceMotion
+        self.screenReader = screenReader
+        self.colorBlindAssist = colorBlindAssist
+        self.hapticFeedback = hapticFeedback
     }
 }
 

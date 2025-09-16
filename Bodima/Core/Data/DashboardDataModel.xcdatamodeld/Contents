@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="22758" systemVersion="23F79" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="DashboardHabitation" representedClassName="DashboardHabitation" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="name" optional="NO" attributeType="String"/>
+        <attribute name="descriptionText" optional="NO" attributeType="String"/>
+        <attribute name="type" optional="NO" attributeType="String"/>
+        <attribute name="isReserved" optional="NO" attributeType="Boolean" defaultValueString="NO"/>
+        <attribute name="price" optional="NO" attributeType="Integer 32" defaultValueString="0"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="updatedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="totalEarnings" optional="NO" attributeType="Double" defaultValueString="0.0"/>
+        <attribute name="reservationCount" optional="NO" attributeType="Integer 16" defaultValueString="0"/>
+        <attribute name="paymentCount" optional="NO" attributeType="Integer 16" defaultValueString="0"/>
+        <attribute name="mainPictureUrl" optional="YES" attributeType="String"/>
+        <relationship name="user" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="DashboardUser" inverseName="habitations"/>
+        <relationship name="pictures" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="DashboardPicture" inverseName="habitation"/>
+        <relationship name="reservations" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="DashboardReservation" inverseName="habitation"/>
+        <relationship name="payments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="DashboardPayment" inverseName="habitation"/>
+        <relationship name="activeReservation" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="DashboardReservation"/>
+        <relationship name="reservedUser" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="DashboardUser"/>
+    </entity>
+    <entity name="DashboardUser" representedClassName="DashboardUser" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="auth" optional="NO" attributeType="String"/>
+        <attribute name="firstName" optional="NO" attributeType="String"/>
+        <attribute name="lastName" optional="NO" attributeType="String"/>
+        <attribute name="bio" optional="NO" attributeType="String"/>
+        <attribute name="phoneNumber" optional="NO" attributeType="String"/>
+        <attribute name="addressNo" optional="NO" attributeType="String"/>
+        <attribute name="addressLine1" optional="NO" attributeType="String"/>
+        <attribute name="addressLine2" optional="YES" attributeType="String"/>
+        <attribute name="city" optional="NO" attributeType="String"/>
+        <attribute name="district" optional="NO" attributeType="String"/>
+        <relationship name="habitations" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="DashboardHabitation" inverseName="user"/>
+    </entity>
+    <entity name="DashboardPicture" representedClassName="DashboardPicture" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="pictureUrl" optional="NO" attributeType="String"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="habitation" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="DashboardHabitation" inverseName="pictures"/>
+    </entity>
+    <entity name="DashboardReservation" representedClassName="DashboardReservation" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="reservedDateTime" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="reservationEndDateTime" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="status" optional="NO" attributeType="String"/>
+        <attribute name="paymentDeadline" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isPaymentCompleted" optional="NO" attributeType="Boolean" defaultValueString="NO"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="updatedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="user" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="DashboardUser"/>
+        <relationship name="habitation" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="DashboardHabitation" inverseName="reservations"/>
+    </entity>
+    <entity name="DashboardPayment" representedClassName="DashboardPayment" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="habitationOwnerId" optional="NO" attributeType="String"/>
+        <attribute name="amount" optional="NO" attributeType="Double" defaultValueString="0.0"/>
+        <attribute name="currencyType" optional="NO" attributeType="String"/>
+        <attribute name="amountType" optional="NO" attributeType="String"/>
+        <attribute name="discount" optional="NO" attributeType="Double" defaultValueString="0.0"/>
+        <attribute name="totalAmount" optional="NO" attributeType="Double" defaultValueString="0.0"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="updatedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="habitation" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="DashboardHabitation" inverseName="payments"/>
+    </entity>
+    <entity name="DashboardStatistics" representedClassName="DashboardStatistics" syncable="YES" codeGenerationType="class">
+        <attribute name="totalHabitations" optional="NO" attributeType="Integer 16" defaultValueString="0"/>
+        <attribute name="totalReservations" optional="NO" attributeType="Integer 16" defaultValueString="0"/>
+        <attribute name="totalPayments" optional="NO" attributeType="Integer 16" defaultValueString="0"/>
+        <attribute name="totalEarnings" optional="NO" attributeType="Double" defaultValueString="0.0"/>
+        <attribute name="activeReservations" optional="NO" attributeType="Integer 16" defaultValueString="0"/>
+        <attribute name="completedReservations" optional="NO" attributeType="Integer 16" defaultValueString="0"/>
+        <attribute name="availableHabitations" optional="NO" attributeType="Integer 16" defaultValueString="0"/>
+        <attribute name="reservedHabitations" optional="NO" attributeType="Integer 16" defaultValueString="0"/>
+        <attribute name="lastUpdated" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+</model>

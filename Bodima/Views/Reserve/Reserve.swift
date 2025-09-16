@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Foundation
 
 struct ReserveView: View {
     let habitation: EnhancedHabitationData
@@ -9,6 +10,11 @@ struct ReserveView: View {
     @State private var startDate = Date()
     @State private var endDate = Date().addingTimeInterval(86400 * 30)
     @State private var navigateToPayment = false
+    @State private var showingAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
+    
+    @StateObject private var reservationViewModel = ReservationViewModel()
     
     private var monthlyRent: Double {
         return Double(habitation.price)
@@ -56,12 +62,25 @@ struct ReserveView: View {
             .background(AppColors.background)
             .navigationBarHidden(true)
             .navigationDestination(isPresented: $navigateToPayment) {
-                PaymentView(
-                    habitation: habitation,
-                    totalAmount: monthlyRent,
-                    propertyTitle: propertyTitle,
-                    propertyAddress: propertyAddress
-                )
+                if let reservationId = reservationViewModel.reservationId {
+                    PaymentView(
+                        habitation: habitation,
+                        totalAmount: monthlyRent,
+                        propertyTitle: propertyTitle,
+                        propertyAddress: propertyAddress,
+                        reservationId: reservationId,
+                        habitationOwnerId: habitation.user?.id ?? "unknown_owner"
+                    )
+                } else {
+                    // Fallback view in case reservation ID is missing
+                    Text("Error: Reservation not found")
+                        .foregroundColor(.red)
+                }
+            }
+            .alert(alertTitle, isPresented: $showingAlert) {
+                Button("OK") { }
+            } message: {
+                Text(alertMessage)
             }
         }
     }
@@ -266,18 +285,67 @@ struct ReserveView: View {
     
     private var continueButton: some View {
         Button(action: {
-            navigateToPayment = true
+            createReservationAndNavigate()
         }) {
-            Text("Continue to Payment")
-                .font(.subheadline.bold())
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(AppColors.primary)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+            HStack {
+                if reservationViewModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .foregroundColor(.white)
+                }
+                
+                Text(reservationViewModel.isLoading ? "Creating Reservation..." : "Continue to Payment")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(reservationViewModel.isLoading ? AppColors.mutedForeground : AppColors.primary)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
+        .disabled(reservationViewModel.isLoading)
         .accessibilityLabel("Continue to Payment")
     }
+    
+    private func createReservationAndNavigate() {
+        // Get the user profile ID using the ViewModel's helper method
+        guard let userProfileId = reservationViewModel.getUserProfileId() else {
+            showAlert(
+                title: "User Profile Required",
+                message: "Unable to retrieve user profile. Please complete your profile setup."
+            )
+            return
+        }
+        
+        createReservationWithUserId(userProfileId)
+    }
+    
+    private func createReservationWithUserId(_ userId: String) {
+        reservationViewModel.createReservation(
+            userId: userId,
+            habitationId: habitation.id,
+            startDate: startDate,
+            endDate: endDate
+        ) { [self] success in
+            if success {
+                // Start the timer for this reservation
+                if let reservationId = reservationViewModel.reservationId {
+                    reservationViewModel.startReservationTimer(for: reservationId)
+                }
+                navigateToPayment = true
+            } else {
+                showAlert(
+                    title: "Reservation Failed",
+                    message: reservationViewModel.errorMessage ?? "Unable to create reservation. Please try again."
+                )
+            }
+        }
+    }
+    
+    private func showAlert(title: String, message: String) {
+        alertTitle = title
+        alertMessage = message
+        showingAlert = true
+    }
 }
-

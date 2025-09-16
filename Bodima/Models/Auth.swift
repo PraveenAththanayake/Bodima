@@ -17,6 +17,20 @@ struct AuthResponse: Codable {
     }
 }
 
+struct TokenVerificationResponse: Codable {
+    let success: Bool
+    let message: String
+    let userData: User?
+    let isValid: Bool?
+    
+    enum CodingKeys: String, CodingKey {
+        case success
+        case message
+        case userData = "user"
+        case isValid
+    }
+}
+
 struct LoginRequest: Codable {
     let email: String?
     let password: String
@@ -120,6 +134,49 @@ struct CreatedProfileData: Codable {
         case updatedAt
         case v = "__v"
     }
+}
+
+struct UpdateProfileRequest: Codable {
+    let firstName: String
+    let lastName: String
+    let profileImageURL: String?
+    let bio: String?
+    let phoneNumber: String
+    let addressNo: String
+    let addressLine1: String
+    let addressLine2: String?
+    let city: String
+    let district: String
+    
+    init(
+        firstName: String,
+        lastName: String,
+        profileImageURL: String,
+        bio: String = "",
+        phoneNumber: String,
+        addressNo: String,
+        addressLine1: String,
+        addressLine2: String = "",
+        city: String,
+        district: String
+    ) {
+        self.firstName = firstName
+        self.lastName = lastName
+        self.profileImageURL = profileImageURL.isEmpty ? nil : profileImageURL
+        self.bio = bio.isEmpty ? nil : bio
+        self.phoneNumber = phoneNumber
+        self.addressNo = addressNo
+        self.addressLine1 = addressLine1
+        self.addressLine2 = addressLine2.isEmpty ? nil : addressLine2
+        self.city = city
+        self.district = district
+    }
+}
+
+struct UpdateProfileResponse: Codable {
+    let success: Bool
+    let message: String
+    let data: ProfileData?
 }
 
 

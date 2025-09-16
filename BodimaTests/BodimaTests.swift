@@ -1,10 +1,3 @@
-//
-//  BodimaTests.swift
-//  BodimaTests
-//
-//  Created by Praveen Aththanayake on 2025-07-13.
-//
-
 import Testing
 @testable import Bodima
 

@@ -8,6 +8,8 @@ struct HomeView: View {
     @StateObject private var featureViewModel = HabitationFeatureViewModel()
     @StateObject private var userStoriesViewModel = UserStoriesViewModel()
     @State private var searchText = ""
+    @State private var selectedHabitationType: HabitationType? = nil
+    @State private var showFilterMenu = false
     @State private var currentUserId: String?
     @State private var locationDataCache: [String: LocationData] = [:]
     @State private var featureDataCache: [String: HabitationFeatureData] = [:]
@@ -21,11 +23,16 @@ struct HomeView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                HeaderView(searchText: $searchText)
+                HeaderView(
+                    searchText: $searchText,
+                    selectedHabitationType: $selectedHabitationType,
+                    showFilterMenu: $showFilterMenu
+                )
                 MainContentView(
                     habitations: habitationViewModel.enhancedHabitations,
                     isLoading: habitationViewModel.isFetchingEnhancedHabitations,
                     searchText: searchText,
+                    selectedHabitationType: selectedHabitationType,
                     locationDataCache: locationDataCache,
                     featureDataCache: featureDataCache,
                     userStories: userStoriesViewModel.sortedStories,
@@ -73,6 +80,8 @@ struct HomeView: View {
         }
         .onAppear {
             loadData()
+            // Start auto-refresh to cleanup expired stories
+            userStoriesViewModel.startAutoRefresh()
         }
         .refreshable {
             loadData()
@@ -162,11 +171,17 @@ struct HomeView: View {
 
 struct HeaderView: View {
     @Binding var searchText: String
+    @Binding var selectedHabitationType: HabitationType?
+    @Binding var showFilterMenu: Bool
     
     var body: some View {
         VStack(spacing: 0) {
             TopBarView()
             SearchBarView(searchText: $searchText)
+            FilterBarView(
+                selectedHabitationType: $selectedHabitationType,
+                showFilterMenu: $showFilterMenu
+            )
         }
         .background(AppColors.background)
     }
@@ -296,10 +311,71 @@ struct ClearButton: View {
     }
 }
 
+struct FilterBarView: View {
+    @Binding var selectedHabitationType: HabitationType?
+    @Binding var showFilterMenu: Bool
+    
+    var body: some View {
+        HStack {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    // All filter button
+                    FilterChip(
+                        title: "All",
+                        isSelected: selectedHabitationType == nil,
+                        action: {
+                            selectedHabitationType = nil
+                        }
+                    )
+                    
+                    // Individual type filter buttons
+                    ForEach(HabitationType.allCases, id: \.self) { type in
+                        FilterChip(
+                            title: type.displayName,
+                            isSelected: selectedHabitationType == type,
+                            action: {
+                                selectedHabitationType = type
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+        .padding(.bottom, 16)
+    }
+}
+
+struct FilterChip: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(isSelected ? .white : AppColors.foreground)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(isSelected ? AppColors.primary : AppColors.input)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(isSelected ? AppColors.primary : AppColors.border, lineWidth: 1)
+                        )
+                )
+        }
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
+    }
+}
+
 struct MainContentView: View {
     let habitations: [EnhancedHabitationData]
     let isLoading: Bool
     let searchText: String
+    let selectedHabitationType: HabitationType?
     let locationDataCache: [String: LocationData]
     let featureDataCache: [String: HabitationFeatureData]
     let userStories: [UserStoryData]
@@ -311,10 +387,11 @@ struct MainContentView: View {
     let storiesViewModel: UserStoriesViewModel
     
     var filteredHabitations: [EnhancedHabitationData] {
-        if searchText.isEmpty {
-            return habitations
-        } else {
-            return habitations.filter { habitation in
+        var filtered = habitations
+        
+        // Filter by search text
+        if !searchText.isEmpty {
+            filtered = filtered.filter { habitation in
                 habitation.name.localizedCaseInsensitiveContains(searchText) ||
                 habitation.description.localizedCaseInsensitiveContains(searchText) ||
                 habitation.userFullName.localizedCaseInsensitiveContains(searchText) ||
@@ -322,6 +399,15 @@ struct MainContentView: View {
                 (habitation.user?.district.localizedCaseInsensitiveContains(searchText) ?? false)
             }
         }
+        
+        // Filter by habitation type
+        if let selectedType = selectedHabitationType {
+            filtered = filtered.filter { habitation in
+                habitation.type == selectedType.rawValue
+            }
+        }
+        
+        return filtered
     }
     
     var body: some View {
@@ -355,17 +441,40 @@ struct StoriesSection: View {
     let storiesViewModel: UserStoriesViewModel
     
     var body: some View {
-        VStack(spacing: 16) {
-            StoriesHeader(storiesCount: stories.count)
-            StoriesScrollView(
-                stories: stories,
-                isLoading: isLoading,
-                onStoryTap: onStoryTap,
-                onCreateStoryTap: onCreateStoryTap,
-                storiesViewModel: storiesViewModel
-            )
+        // Only show stories section if there are active stories or if loading
+        if isLoading || !stories.isEmpty {
+            VStack(spacing: 16) {
+                StoriesHeader(storiesCount: stories.count)
+                StoriesScrollView(
+                    stories: stories,
+                    isLoading: isLoading,
+                    onStoryTap: onStoryTap,
+                    onCreateStoryTap: onCreateStoryTap,
+                    storiesViewModel: storiesViewModel
+                )
+            }
+            .padding(.bottom, 24)
+        } else {
+            // When no stories, show only the create story button
+            VStack(spacing: 16) {
+                HStack {
+                    Text("Stories")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(AppColors.foreground)
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        CreateStoryButton(onTap: onCreateStoryTap)
+                    }
+                    .padding(.horizontal, 20)
+                }
+            }
+            .padding(.bottom, 24)
         }
-        .padding(.bottom, 24)
     }
 }
 
@@ -374,22 +483,30 @@ struct StoriesHeader: View {
     
     var body: some View {
         HStack {
-            Text("Stories")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(AppColors.foreground)
-            
-            if storiesCount > 0 {
-                Text("(\(storiesCount))")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(AppColors.mutedForeground)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Stories")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(AppColors.foreground)
+                
+                if storiesCount > 0 {
+                    Text("\(storiesCount) active • disappear in 24h")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(AppColors.mutedForeground)
+                } else {
+                    Text("Stories disappear after 24 hours")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(AppColors.mutedForeground)
+                }
             }
             
             Spacer()
             
-            Button(action: {}) {
-                Text("View All")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(AppColors.primary)
+            if storiesCount > 0 {
+                Button(action: {}) {
+                    Text("View All")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(AppColors.primary)
+                }
             }
         }
         .padding(.horizontal, 20)
@@ -403,27 +520,52 @@ struct StoriesScrollView: View {
     let onCreateStoryTap: () -> Void
     let storiesViewModel: UserStoriesViewModel
     
-    // Group stories by user ID
-    private var storiesByUser: [String: [UserStoryData]] {
-        Dictionary(grouping: stories) { $0.user.id }
+    // Group stories by user ID and filter to only include 24-hour stories
+    private var activeStoriesByUser: [String: [UserStoryData]] {
+        let now = Date()
+        let twentyFourHoursAgo = now.addingTimeInterval(-24 * 60 * 60)
+        
+        // First filter stories to only include those within 24 hours
+        let activeStories = stories.filter { story in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            
+            guard let storyDate = formatter.date(from: story.createdAt) else {
+                return false
+            }
+            
+            return storyDate >= twentyFourHoursAgo
+        }
+        
+        // Then group by user ID
+        return Dictionary(grouping: activeStories) { $0.user.id }
     }
     
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 16) {
                 CreateStoryButton(onTap: onCreateStoryTap)
+                
                 if isLoading {
                     ForEach(0..<3, id: \.self) { _ in
                         StoryPlaceholderView()
                     }
-                } else if stories.isEmpty {
-                    EmptyStoriesView()
                 } else {
-                    // Display one circle per user with their stories
-                    ForEach(Array(storiesByUser.keys), id: \.self) { userId in
-                        if let userStories = storiesByUser[userId], !userStories.isEmpty {
+                    // Display one circle per user with their active stories
+                    ForEach(Array(activeStoriesByUser.keys), id: \.self) { userId in
+                        if let userStories = activeStoriesByUser[userId], !userStories.isEmpty {
                             UserStoriesView(
-                                userStories: userStories,
+                                userStories: userStories.sorted { story1, story2 in
+                                    let formatter = ISO8601DateFormatter()
+                                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                                    
+                                    guard let date1 = formatter.date(from: story1.createdAt),
+                                          let date2 = formatter.date(from: story2.createdAt) else {
+                                        return false
+                                    }
+                                    
+                                    return date1 > date2 // Most recent first
+                                },
                                 onStoryTap: onStoryTap
                             )
                         }
@@ -445,46 +587,71 @@ struct UserStoriesView: View {
         userStories.first?.user ?? UserStoryUser(id: "", auth: nil, firstName: nil, lastName: nil, bio: nil, phoneNumber: nil, addressNo: nil, addressLine1: nil, addressLine2: nil, city: nil, district: nil)
     }
     
-    var body: some View {
-        Button(action: {
-            onStoryTap(userStories[currentStoryIndex])
-        }) {
-            VStack(spacing: 8) {
-                ZStack {
-                    // Display the current story image
-                    AsyncImage(url: URL(string: userStories[currentStoryIndex].storyImageUrl)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 66, height: 66)
-                            .clipped()
-                    } placeholder: {
-                        Circle()
-                            .fill(AppColors.input)
-                            .frame(width: 66, height: 66)
-                            .overlay(
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                            )
-                    }
-                    .clipShape(Circle())
-                    
-                    // Story segments indicator
-                    StorySegmentsIndicator(totalSegments: userStories.count, currentSegment: currentStoryIndex)
-                }
-                
-                Text(getUserDisplayName(from: user))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(AppColors.foreground)
-                    .lineLimit(1)
-                    .frame(width: 76)
-                    .truncationMode(.tail)
+    // Filter stories to only include those within 24 hours
+    private var activeStories: [UserStoryData] {
+        let now = Date()
+        let twentyFourHoursAgo = now.addingTimeInterval(-24 * 60 * 60)
+        
+        return userStories.filter { story in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            
+            guard let storyDate = formatter.date(from: story.createdAt) else {
+                return false
             }
+            
+            return storyDate >= twentyFourHoursAgo
         }
-        .frame(width: 76)
-        .onAppear {
-            // Reset to first story when view appears
-            currentStoryIndex = 0
+    }
+    
+    var body: some View {
+        // Only show if there are active stories
+        if !activeStories.isEmpty {
+            Button(action: {
+                let validIndex = min(currentStoryIndex, activeStories.count - 1)
+                onStoryTap(activeStories[validIndex])
+            }) {
+                VStack(spacing: 8) {
+                    ZStack {
+                        // Display the current story image
+                        AsyncImage(url: URL(string: activeStories[min(currentStoryIndex, activeStories.count - 1)].storyImageUrl)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 66, height: 66)
+                                .clipped()
+                        } placeholder: {
+                            Circle()
+                                .fill(AppColors.input)
+                                .frame(width: 66, height: 66)
+                                .overlay(
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                )
+                        }
+                        .clipShape(Circle())
+                        
+                        // Story segments indicator with time-based styling
+                        StorySegmentsIndicator(
+                            totalSegments: activeStories.count, 
+                            currentSegment: currentStoryIndex,
+                            stories: activeStories
+                        )
+                    }
+                    
+                    Text(getUserDisplayName(from: user))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(AppColors.foreground)
+                        .lineLimit(1)
+                        .frame(width: 76)
+                        .truncationMode(.tail)
+                }
+            }
+            .frame(width: 76)
+            .onAppear {
+                // Reset to first story when view appears
+                currentStoryIndex = 0
+            }
         }
     }
     
@@ -503,15 +670,12 @@ struct UserStoriesView: View {
 struct StorySegmentsIndicator: View {
     let totalSegments: Int
     let currentSegment: Int
+    let stories: [UserStoryData]
     
     var body: some View {
         Circle()
             .stroke(
-                LinearGradient(
-                    colors: [AppColors.primary, AppColors.primary.opacity(0.6)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
+                getStoryBorderGradient(),
                 lineWidth: 3
             )
             .frame(width: 66, height: 66)
@@ -522,11 +686,55 @@ struct StorySegmentsIndicator: View {
                         SegmentArc(
                             index: index,
                             total: totalSegments,
-                            isActive: index <= currentSegment
+                            isActive: index <= currentSegment,
+                            storyAge: getStoryAge(at: index)
                         )
                     }
                 }
             )
+    }
+    
+    private func getStoryBorderGradient() -> LinearGradient {
+        // Check if any story is close to expiring (less than 3 hours left)
+        let hasExpiringStory = stories.contains { story in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            
+            guard let storyDate = formatter.date(from: story.createdAt) else {
+                return false
+            }
+            
+            let now = Date()
+            let hoursLeft = (24 * 60 * 60 - now.timeIntervalSince(storyDate)) / 3600
+            return hoursLeft <= 3 && hoursLeft > 0
+        }
+        
+        if hasExpiringStory {
+            return LinearGradient(
+                colors: [Color.orange, Color.red.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            return LinearGradient(
+                colors: [AppColors.primary, AppColors.primary.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
+    private func getStoryAge(at index: Int) -> TimeInterval {
+        guard index < stories.count else { return 0 }
+        
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        guard let storyDate = formatter.date(from: stories[index].createdAt) else {
+            return 0
+        }
+        
+        return Date().timeIntervalSince(storyDate)
     }
 }
 
@@ -535,6 +743,7 @@ struct SegmentArc: View {
     let index: Int
     let total: Int
     let isActive: Bool
+    let storyAge: TimeInterval
     
     var body: some View {
         let angleSize = 360.0 / Double(total)
@@ -550,7 +759,24 @@ struct SegmentArc: View {
                 clockwise: false
             )
         }
-        .stroke(isActive ? AppColors.primary : AppColors.mutedForeground, lineWidth: 3)
+        .stroke(getSegmentColor(), lineWidth: 3)
+    }
+    
+    private func getSegmentColor() -> Color {
+        if !isActive {
+            return AppColors.mutedForeground
+        }
+        
+        // Color based on story age
+        let hoursOld = storyAge / 3600
+        
+        if hoursOld > 20 {
+            return Color.red.opacity(0.8) // Very close to expiring
+        } else if hoursOld > 12 {
+            return Color.orange.opacity(0.9) // Getting old
+        } else {
+            return AppColors.primary // Fresh story
+        }
     }
 }
 
@@ -673,14 +899,18 @@ struct EmptyStoriesView: View {
                         .stroke(AppColors.border, lineWidth: 2)
                 )
                 .overlay(
-                    Image(systemName: "photo")
+                    Image(systemName: "clock")
                         .font(.system(size: 24))
                         .foregroundColor(AppColors.mutedForeground)
                 )
             
-            Text("No Stories")
+            Text("No Recent Stories")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(AppColors.mutedForeground)
+            
+            Text("Stories disappear after 24h")
+                .font(.system(size: 10, weight: .regular))
+                .foregroundColor(AppColors.mutedForeground.opacity(0.7))
         }
         .frame(width: 76)
     }
@@ -768,13 +998,51 @@ struct StoryOverlayView: View {
     
     // Load all stories from the same user
     private func loadUserStories() {
-        // Find all stories from the same user
-        let allStories = storiesViewModel.userStories
-        userStories = allStories.filter { $0.user.id == story.user.id }
+        let now = Date()
+        let twentyFourHoursAgo = now.addingTimeInterval(-24 * 60 * 60)
         
-        // If no other stories found, just use the current story
+        // Find all active stories from the same user (within 24 hours)
+        let allStories = storiesViewModel.userStories
+        let userActiveStories = allStories.filter { userStory in
+            // Same user check
+            guard userStory.user.id == story.user.id else { return false }
+            
+            // 24-hour check
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            
+            guard let storyDate = formatter.date(from: userStory.createdAt) else {
+                return false
+            }
+            
+            return storyDate >= twentyFourHoursAgo
+        }
+        
+        userStories = userActiveStories.sorted { story1, story2 in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            
+            guard let date1 = formatter.date(from: story1.createdAt),
+                  let date2 = formatter.date(from: story2.createdAt) else {
+                return false
+            }
+            
+            return date1 > date2 // Most recent first
+        }
+        
+        // If no active stories found, just use the current story if it's still active
         if userStories.isEmpty {
-            userStories = [story]
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            
+            if let storyDate = formatter.date(from: story.createdAt),
+               storyDate >= twentyFourHoursAgo {
+                userStories = [story]
+            } else {
+                // Story has expired, close the overlay
+                dismissStory()
+                return
+            }
         }
         
         // Find the index of the current story
@@ -948,6 +1216,7 @@ struct StoryHeader: View {
         
         let now = Date()
         let timeInterval = now.timeIntervalSince(date)
+        let hoursLeft = max(0, (24 * 60 * 60 - timeInterval) / 3600)
         
         if timeInterval < 60 {
             return "now"
@@ -956,10 +1225,14 @@ struct StoryHeader: View {
             return "\(minutes)m"
         } else if timeInterval < 86400 {
             let hours = Int(timeInterval / 3600)
-            return "\(hours)h"
+            let remaining = Int(hoursLeft)
+            if remaining <= 3 {
+                return "\(hours)h • \(remaining)h left"
+            } else {
+                return "\(hours)h"
+            }
         } else {
-            let days = Int(timeInterval / 86400)
-            return "\(days)d"
+            return "expired"
         }
     }
 }

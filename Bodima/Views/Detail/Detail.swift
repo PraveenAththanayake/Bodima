@@ -11,6 +11,8 @@ struct DetailView: View {
     @State private var likesCount = 24
     @State private var isFollowing = false
     @State private var navigateToReserve = false
+    @State private var showReservationDialog = false
+    @State private var navigateToHome = false
     @Environment(\.presentationMode) var presentationMode
     
     private var fullAddress: String {
@@ -84,6 +86,33 @@ struct DetailView: View {
                     locationData: locationData,
                     featureData: featureData
                 )
+            }
+        }
+        .overlay(
+            Group {
+                if showReservationDialog {
+                    ReservationConfirmationDialog(
+                        habitation: habitation,
+                        onConfirm: {
+                            showReservationDialog = false
+                            navigateToReserve = true
+                        },
+                        onCancel: {
+                            showReservationDialog = false
+                        },
+                        onExpired: {
+                            showReservationDialog = false
+                            navigateToHome = true
+                        }
+                    )
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: showReservationDialog)
+                }
+            }
+        )
+        .onChange(of: navigateToHome) { shouldNavigateToHome in
+            if shouldNavigateToHome {
+                // Navigate back to home by dismissing the current view
+                presentationMode.wrappedValue.dismiss()
             }
         }
     }
@@ -435,18 +464,19 @@ struct DetailView: View {
                 .foregroundStyle(AppColors.mutedForeground)
             
             Button(action: {
-                navigateToReserve = true
+                showReservationDialog = true
             }) {
                 Text("Reserve Now")
                     .font(.subheadline.bold())
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(AppColors.primary)
+                    .background(habitation.isReserved ? AppColors.mutedForeground : AppColors.primary)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Reserve Now")
+            .disabled(habitation.isReserved)
+            .accessibilityLabel(habitation.isReserved ? "Property Already Reserved" : "Reserve Now")
         }
         .padding(16)
         .background(

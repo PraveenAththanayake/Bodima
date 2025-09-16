@@ -1,13 +1,23 @@
 import SwiftUI
+import Foundation
 
 struct PaymentView: View {
     @State private var selectedCard: PaymentCard?
+    @StateObject private var paymentViewModel = PaymentViewModel()
+    @StateObject private var reservationViewModel = ReservationViewModel()
+    @State private var showingAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
+    @State private var shouldNavigateToHome = false
+    
     let habitation: EnhancedHabitationData?
     @Environment(\.dismiss) private var dismiss
     
     let totalAmount: Double
     let propertyTitle: String
     let propertyAddress: String
+    let reservationId: String
+    let habitationOwnerId: String
     
     private let paymentCards = [
         PaymentCard(type: .visa, cardNumber: "1234567890123456", holderName: "John Doe"),
@@ -52,6 +62,15 @@ struct PaymentView: View {
             }
             .background(AppColors.background)
             .navigationBarHidden(true)
+            .onAppear {
+                // Monitor reservation status for expiration
+                checkReservationStatus()
+            }
+            .onChange(of: shouldNavigateToHome) { navigate in
+                if navigate {
+                    dismiss()
+                }
+            }
         }
     }
     
@@ -136,29 +155,99 @@ struct PaymentView: View {
     
     private var payButton: some View {
         Button(action: handlePayment) {
-            Text("Pay Now")
-                .font(.subheadline.bold())
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(
-                    selectedCard != nil ? AppColors.primary : AppColors.mutedForeground
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+            HStack {
+                if paymentViewModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .foregroundColor(.white)
+                }
+                
+                Text(paymentViewModel.isLoading ? "Processing..." : "Pay Now")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(
+                selectedCard != nil && !paymentViewModel.isLoading ? AppColors.primary : AppColors.mutedForeground
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
-        .disabled(selectedCard == nil)
+        .disabled(selectedCard == nil || paymentViewModel.isLoading)
         .accessibilityLabel("Pay Now")
+        .alert(alertTitle, isPresented: $showingAlert) {
+            Button("OK") {
+                if alertTitle == "Success" {
+                    dismiss()
+                }
+            }
+        } message: {
+            Text(alertMessage)
+        }
     }
     
+    // MARK: - Helper Methods
     private func handlePayment() {
-        print("Payment processed with card: \(selectedCard?.cardNumber ?? "Unknown")")
-        print("Property: \(propertyTitle)")
-        print("Amount: LKR \(totalAmount)")
-        dismiss()
+        // Validate payment method selection
+        guard let selectedCard = selectedCard else {
+            showAlert(title: "Error", message: "Please select a payment method")
+            return
+        }
+        
+        // Test server connection before processing payment
+        paymentViewModel.testConnection { [self] success in
+            if success {
+                // Process payment through NetworkManager
+                paymentViewModel.createPayment(
+                    habitationOwnerId: habitationOwnerId,
+                    reservationId: reservationId,
+                    amount: totalAmount
+                ) { [self] success in
+                    if success {
+                        // Payment successful, now confirm the reservation
+                        reservationViewModel.confirmReservation(reservationId: reservationId) { confirmSuccess in
+                            if confirmSuccess {
+                                showAlert(title: "Success", message: "Payment completed and reservation confirmed successfully!")
+                            } else {
+                                showAlert(title: "Warning", message: "Payment completed but reservation confirmation failed. Please contact support.")
+                            }
+                        }
+                    } else {
+                        showAlert(title: "Error", message: paymentViewModel.errorMessage ?? "Payment failed. Please try again.")
+                    }
+                }
+            } else {
+                showAlert(title: "Connection Error", message: paymentViewModel.errorMessage ?? "Cannot connect to payment server. Please check your connection.")
+            }
+        }
+    }
+    
+    private func showAlert(title: String, message: String) {
+        alertTitle = title
+        alertMessage = message
+        showingAlert = true
+    }
+    
+    private func checkReservationStatus() {
+        // Check reservation status periodically
+        Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { timer in
+            reservationViewModel.getReservation(reservationId: reservationId) { reservationData in
+                if let data = reservationData {
+                    if data.status == "expired" {
+                        timer.invalidate()
+                        showAlert(title: "Reservation Expired", message: "Your reservation has expired. Returning to home screen.")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            shouldNavigateToHome = true
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
+// MARK: - Payment Card Components
 struct PaymentCardRow: View {
     let card: PaymentCard
     let isSelected: Bool
@@ -222,6 +311,7 @@ struct PaymentCardRow: View {
     }
 }
 
+// MARK: - Payment Card Model
 struct PaymentCard: Identifiable {
     let id = UUID()
     let type: CardType

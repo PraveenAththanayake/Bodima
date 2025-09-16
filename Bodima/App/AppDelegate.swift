@@ -1,10 +1,3 @@
-//
-//  AppDelegate.swift
-//  Bodima
-//
-//  Created by Praveen Aththanayake on 2025-07-13.
-//
-
 import UIKit
 import UserNotifications
 import FirebaseCore

@@ -1,7 +1,6 @@
 import SwiftUI
 import PhotosUI
 
-// MARK: - Create Profile View
 struct CreateProfileView: View {
     @StateObject private var profileViewModel = ProfileViewModel()
     @StateObject private var authViewModel = AuthViewModel.shared
@@ -298,8 +297,6 @@ struct CreateProfileView: View {
         // Process profile image if available
         var processedImageURL = ""
         if profileImage != nil {
-            // You can implement image upload logic here
-            // For now, we'll use a placeholder URL or base64 processing
             processedImageURL = "https://example.com/profile-pic.jpg"
         }
         

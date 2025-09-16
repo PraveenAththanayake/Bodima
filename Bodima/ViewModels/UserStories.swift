@@ -234,6 +234,39 @@ class UserStoriesViewModel: ObservableObject {
         fetchUserStories()
     }
     
+    // MARK: - Auto-refresh for expired stories
+    func startAutoRefresh() {
+        // Refresh every 5 minutes to remove expired stories
+        Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
+            DispatchQueue.main.async {
+                self.cleanupExpiredStories()
+            }
+        }
+    }
+    
+    private func cleanupExpiredStories() {
+        let now = Date()
+        let twentyFourHoursAgo = now.addingTimeInterval(-24 * 60 * 60)
+        
+        let initialCount = userStories.count
+        
+        userStories = userStories.filter { story in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            
+            guard let storyDate = formatter.date(from: story.createdAt) else {
+                return false // Remove stories with invalid dates
+            }
+            
+            return storyDate >= twentyFourHoursAgo
+        }
+        
+        let removedCount = initialCount - userStories.count
+        if removedCount > 0 {
+            print("📱 Cleaned up \(removedCount) expired stories")
+        }
+    }
+    
     // MARK: - Error Handling
     private func handleNetworkError(_ error: Error) {
         if let networkError = error as? NetworkError {
@@ -340,6 +373,66 @@ class UserStoriesViewModel: ObservableObject {
         }
     }
     
+    // MARK: - 24-Hour Story Helper Methods
+    
+    /// Check if a story is within the 24-hour window
+    func isStoryWithin24Hours(_ story: UserStoryData) -> Bool {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        guard let storyDate = formatter.date(from: story.createdAt) else {
+            return false
+        }
+        
+        let now = Date()
+        let twentyFourHoursAgo = now.addingTimeInterval(-24 * 60 * 60)
+        
+        return storyDate >= twentyFourHoursAgo
+    }
+    
+    /// Get the remaining time for a story before it expires (in hours)
+    func getRemainingHours(for story: UserStoryData) -> Int {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        guard let storyDate = formatter.date(from: story.createdAt) else {
+            return 0
+        }
+        
+        let now = Date()
+        let twentyFourHoursLater = storyDate.addingTimeInterval(24 * 60 * 60)
+        let remainingTime = twentyFourHoursLater.timeIntervalSince(now)
+        
+        return max(0, Int(remainingTime / 3600))
+    }
+    
+    /// Get a more detailed relative time for WhatsApp-like display
+    func getWhatsAppStyleTime(from dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        guard let date = formatter.date(from: dateString) else {
+            return "Unknown"
+        }
+        
+        let now = Date()
+        let timeInterval = now.timeIntervalSince(date)
+        
+        if timeInterval < 60 {
+            return "now"
+        } else if timeInterval < 3600 {
+            let minutes = Int(timeInterval / 60)
+            return "\(minutes)m"
+        } else if timeInterval < 86400 {
+            let hours = Int(timeInterval / 3600)
+            return "\(hours)h"
+        } else {
+            // This should rarely happen since we filter out 24+ hour old stories
+            let days = Int(timeInterval / 86400)
+            return "\(days)d"
+        }
+    }
+    
     func getUserDisplayName(from user: UserStoryUser) -> String {
         if let firstName = user.firstName, !firstName.isEmpty,
            let lastName = user.lastName, !lastName.isEmpty {
@@ -370,25 +463,52 @@ class UserStoriesViewModel: ObservableObject {
     // MARK: - Computed Properties
     
     var storiesCount: Int {
-        return userStories.count
+        return sortedStories.count // Use filtered stories count
+    }
+    
+    var totalStoriesCount: Int {
+        return userStories.count // All stories regardless of age
     }
     
     var hasStories: Bool {
-        return !userStories.isEmpty
+        return !sortedStories.isEmpty // Check filtered stories
+    }
+    
+    var hasActiveStories: Bool {
+        return !sortedStories.isEmpty
+    }
+    
+    var expiredStoriesCount: Int {
+        return totalStoriesCount - storiesCount
     }
     
     var sortedStories: [UserStoryData] {
-        return userStories.sorted { story1, story2 in
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            
-            guard let date1 = formatter.date(from: story1.createdAt),
-                  let date2 = formatter.date(from: story2.createdAt) else {
-                return false
+        let now = Date()
+        let twentyFourHoursAgo = now.addingTimeInterval(-24 * 60 * 60) // 24 hours ago
+        
+        return userStories
+            .filter { story in
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                
+                guard let storyDate = formatter.date(from: story.createdAt) else {
+                    return false // Exclude stories with invalid dates
+                }
+                
+                // Only include stories from the last 24 hours
+                return storyDate >= twentyFourHoursAgo
             }
-            
-            return date1 > date2 // Most recent first
-        }
+            .sorted { story1, story2 in
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                
+                guard let date1 = formatter.date(from: story1.createdAt),
+                      let date2 = formatter.date(from: story2.createdAt) else {
+                    return false
+                }
+                
+                return date1 > date2 // Most recent first
+            }
     }
     
     // MARK: - Clear Data

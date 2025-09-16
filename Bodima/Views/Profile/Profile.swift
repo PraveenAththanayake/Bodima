@@ -1,9 +1,11 @@
 import Foundation
 import SwiftUI
+import LocalAuthentication
 
 struct ProfileView: View {
     @StateObject private var profileViewModel = ProfileViewModel()
     @StateObject private var authViewModel = AuthViewModel.shared
+    @StateObject private var accessibilityViewModel: AccessibilityViewModel = AccessibilityViewModel()
     
     var body: some View {
         NavigationView {
@@ -15,7 +17,9 @@ struct ProfileView: View {
             .navigationBarHidden(true)
             .onAppear {
                 loadProfile()
+                loadAccessibilitySettings()
             }
+            .modifier(AccessibilityAwareModifier(settings: accessibilityViewModel.accessibilitySettings))
             .alert("Error", isPresented: $profileViewModel.hasError) {
                 Button("OK") {
                     profileViewModel.hasError = false
@@ -49,6 +53,15 @@ struct ProfileView: View {
             profileViewModel.refreshProfile(userId: userId)
         }
     }
+    
+    private func loadAccessibilitySettings() {
+        guard let userId = authViewModel.currentUser?.id ?? UserDefaults.standard.string(forKey: "user_id") else {
+            return
+        }
+        
+        accessibilityViewModel.loadLocalSettings()
+        accessibilityViewModel.fetchAccessibilitySettings(userId: userId)
+    }
 }
 
 // MARK: - Profile Header
@@ -77,9 +90,7 @@ struct ProfileTopBarView: View {
             
             Spacer()
             
-            Button(action: {
-                // Add settings action here
-            }) {
+            NavigationLink(destination: AccessibilitySettingsView()) {
                 ZStack {
                     Circle()
                         .fill(AppColors.input)
@@ -292,6 +303,9 @@ struct ProfileDetailsSectionView: View {
                 }
             }
             
+            // Security Settings Card
+            ProfileSecuritySettingsView()
+            
             // Account Information Card
             ProfileCardView(title: "Account Information") {
                 VStack(spacing: 12) {
@@ -363,12 +377,13 @@ struct ProfileDetailRow: View {
 struct ProfileActionButtonsView: View {
     @ObservedObject var profileViewModel: ProfileViewModel
     @ObservedObject var authViewModel: AuthViewModel
+    @State private var showingEditProfile = false
     
     var body: some View {
         VStack(spacing: 12) {
             // Edit Profile Button
             Button(action: {
-                // Add edit profile action
+                showingEditProfile = true
             }) {
                 HStack(spacing: 8) {
                     Image(systemName: "pencil")
@@ -429,6 +444,9 @@ struct ProfileActionButtonsView: View {
                 .background(Color.red)
                 .cornerRadius(12)
             }
+        }
+        .sheet(isPresented: $showingEditProfile) {
+            EditProfileView(profileViewModel: profileViewModel)
         }
     }
     
@@ -541,5 +559,244 @@ struct ProfileNoDataView: View {
 
 #Preview {
     ProfileView()
+}
+
+// MARK: - Profile Security Settings
+struct ProfileSecuritySettingsView: View {
+    @StateObject private var biometricManager = BiometricManager.shared
+    @StateObject private var authViewModel = AuthViewModel.shared
+    @State private var showingBiometricAlert = false
+    @State private var biometricAlertMessage = ""
+    @State private var showingConfirmationAlert = false
+    
+    var body: some View {
+        ProfileCardView(title: "Security Settings") {
+            VStack(spacing: 16) {
+                if biometricManager.isBiometricAvailable {
+                    BiometricToggleRow(
+                        biometricManager: biometricManager,
+                        showingAlert: $showingBiometricAlert,
+                        alertMessage: $biometricAlertMessage,
+                        showingConfirmation: $showingConfirmationAlert
+                    )
+                } else {
+                    BiometricUnavailableRow(biometricManager: biometricManager)
+                }
+                
+                Divider()
+                    .background(AppColors.border)
+                
+                // Additional security settings can be added here
+                SecurityInfoRow()
+            }
+        }
+        .alert("Biometric Authentication", isPresented: $showingBiometricAlert) {
+            Button("OK") {
+                showingBiometricAlert = false
+            }
+        } message: {
+            Text(biometricAlertMessage)
+        }
+        .alert("Disable Biometric Authentication?", isPresented: $showingConfirmationAlert) {
+            Button("Cancel", role: .cancel) {
+                showingConfirmationAlert = false
+            }
+            Button("Disable", role: .destructive) {
+                disableBiometric()
+                showingConfirmationAlert = false
+            }
+        } message: {
+            Text("This will remove your saved biometric login. You'll need to enable it again and sign in with your password.")
+        }
+    }
+    
+    private func toggleBiometric() {
+        if biometricManager.isBiometricEnabled {
+            showingConfirmationAlert = true
+        } else {
+            enableBiometric()
+        }
+    }
+    
+    private func enableBiometric() {
+        // Don't try to authenticate with biometrics when enabling for the first time
+        // Just store the current token directly
+        guard let token = authViewModel.jwtToken, !token.isEmpty else {
+            biometricAlertMessage = "No valid session found. Please sign in again."
+            showingBiometricAlert = true
+            return
+        }
+        
+        Task {
+            do {
+                let success = biometricManager.storeBiometricToken(token)
+                
+                await MainActor.run {
+                    if success {
+                        biometricManager.setBiometricEnabled(true)
+                        biometricAlertMessage = "\(biometricManager.getBiometricTypeString()) has been enabled successfully!"
+                    } else {
+                        biometricAlertMessage = "Failed to store authentication data. Please try again."
+                    }
+                    showingBiometricAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    biometricAlertMessage = "Error enabling biometric authentication: \(error.localizedDescription)"
+                    showingBiometricAlert = true
+                }
+            }
+        }
+    }
+    
+    private func disableBiometric() {
+        biometricManager.setBiometricEnabled(false)
+        biometricManager.clearBiometricToken()
+    }
+}
+
+// MARK: - Biometric Toggle Row
+struct BiometricToggleRow: View {
+    @ObservedObject var biometricManager: BiometricManager
+    @Binding var showingAlert: Bool
+    @Binding var alertMessage: String
+    @Binding var showingConfirmation: Bool
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Biometric Icon
+            ZStack {
+                Circle()
+                    .fill(biometricManager.isBiometricEnabled ? AppColors.primary.opacity(0.1) : AppColors.input)
+                    .frame(width: 40, height: 40)
+                
+                Image(systemName: biometricManager.getBiometricIcon())
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(biometricManager.isBiometricEnabled ? AppColors.primary : AppColors.mutedForeground)
+            }
+            
+            // Text Content
+            VStack(alignment: .leading, spacing: 2) {
+                Text(biometricManager.getBiometricTypeString())
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(AppColors.foreground)
+                
+                Text(biometricManager.isBiometricEnabled ? "Enabled" : "Sign in with \(biometricManager.getBiometricTypeString().lowercased())")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(AppColors.mutedForeground)
+            }
+            
+            Spacer()
+            
+            // Toggle Switch
+            Toggle("", isOn: .init(
+                get: { biometricManager.isBiometricEnabled },
+                set: { _ in toggleBiometric() }
+            ))
+            .toggleStyle(SwitchToggleStyle(tint: AppColors.primary))
+        }
+    }
+    
+    private func toggleBiometric() {
+        if biometricManager.isBiometricEnabled {
+            showingConfirmation = true
+        } else {
+            enableBiometric()
+        }
+    }
+    
+    private func enableBiometric() {
+        guard let token = AuthViewModel.shared.jwtToken, !token.isEmpty else {
+            alertMessage = "No valid session found. Please sign in again."
+            showingAlert = true
+            return
+        }
+        
+        Task {
+            do {
+                let success = biometricManager.storeBiometricToken(token)
+                
+                await MainActor.run {
+                    if success {
+                        biometricManager.setBiometricEnabled(true)
+                        alertMessage = "\(biometricManager.getBiometricTypeString()) has been enabled successfully!"
+                    } else {
+                        alertMessage = "Failed to store authentication data. Please try again."
+                    }
+                    showingAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    alertMessage = "Error enabling biometric authentication: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Biometric Unavailable Row
+struct BiometricUnavailableRow: View {
+    @ObservedObject var biometricManager: BiometricManager
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Warning Icon
+            ZStack {
+                Circle()
+                    .fill(Color.orange.opacity(0.1))
+                    .frame(width: 40, height: 40)
+                
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.orange)
+            }
+            
+            // Text Content
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Biometric Authentication")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(AppColors.foreground)
+                
+                Text("Not available on this device")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(AppColors.mutedForeground)
+            }
+            
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Security Info Row
+struct SecurityInfoRow: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            // Info Icon
+            ZStack {
+                Circle()
+                    .fill(AppColors.primary.opacity(0.1))
+                    .frame(width: 40, height: 40)
+                
+                Image(systemName: "info.circle")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(AppColors.primary)
+            }
+            
+            // Text Content
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Security Information")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(AppColors.foreground)
+                
+                Text("Your biometric data is stored securely on your device and never shared")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(AppColors.mutedForeground)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            Spacer()
+        }
+    }
 }
 

@@ -1,13 +1,17 @@
 import SwiftUI
+import LocalAuthentication
 
 struct SignInView: View {
     @StateObject private var authViewModel = AuthViewModel.shared
+    @StateObject private var biometricManager = BiometricManager.shared
     @State private var email = ""
     @State private var password = ""
     @State private var isSecureTextEntry = true
     @State private var rememberMe = false
     @State private var showingForgotPassword = false
     @State private var showingSignUp = false
+    @State private var showingBiometricError = false
+    @State private var biometricErrorMessage = ""
     
     var body: some View {
         GeometryReader { geometry in
@@ -163,6 +167,18 @@ struct SignInView: View {
                         .padding(.top, 16)
                     }
                     
+                    // Biometric Authentication Section
+                    if biometricManager.isBiometricAvailable && biometricManager.isBiometricEnabled {
+                        BiometricSignInSection()
+                            .onAppear {
+                                // Perform a safety check when the biometric section appears
+                                let testResult = biometricManager.testBiometricAvailability()
+                                if !testResult.available {
+                                    print("🔴 Biometric section appeared but biometric not available: \(testResult.error ?? "Unknown")")
+                                }
+                            }
+                    }
+                    
                     // Sign Up Navigation
                     HStack {
                         Text("Don't have an account?")
@@ -194,6 +210,20 @@ struct SignInView: View {
         .onSubmit {
             handleSignIn()
         }
+        .onAppear {
+            // Check if biometric authentication is available and enabled
+            if biometricManager.isBiometricAvailable && biometricManager.isBiometricEnabled {
+                // Auto-trigger biometric authentication if conditions are met
+                // This is optional - you can remove this if you want manual biometric login only
+            }
+        }
+        .alert("Biometric Authentication Error", isPresented: $showingBiometricError) {
+            Button("OK") {
+                showingBiometricError = false
+            }
+        } message: {
+            Text(biometricErrorMessage)
+        }
     }
     
     // MARK: - Computed Properties
@@ -224,5 +254,131 @@ struct SignInView: View {
 #Preview {
     NavigationView {
         SignInView()
+    }
+}
+
+// MARK: - Biometric Sign In Section
+struct BiometricSignInSection: View {
+    @StateObject private var biometricManager = BiometricManager.shared
+    @StateObject private var authViewModel = AuthViewModel.shared
+    @State private var showingBiometricError = false
+    @State private var biometricErrorMessage = ""
+    @State private var isBiometricLoading = false
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Divider with "OR" text
+            HStack {
+                Rectangle()
+                    .fill(AppColors.border)
+                    .frame(height: 1)
+                
+                Text("OR")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(AppColors.mutedForeground)
+                    .padding(.horizontal, 16)
+                
+                Rectangle()
+                    .fill(AppColors.border)
+                    .frame(height: 1)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            
+            // Biometric Sign In Button
+            Button(action: {
+                handleBiometricSignIn()
+            }) {
+                HStack(spacing: 12) {
+                    if isBiometricLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.9)
+                    } else {
+                        Image(systemName: biometricManager.getBiometricIcon())
+                            .font(.system(size: 18, weight: .medium))
+                    }
+                    
+                    Text(isBiometricLoading ? "Authenticating..." : "Sign in with \(biometricManager.getBiometricTypeString())")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(isBiometricLoading ? AppColors.primary.opacity(0.6) : AppColors.primary)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(AppColors.primary.opacity(0.3), lineWidth: 1)
+                )
+            }
+            .disabled(isBiometricLoading)
+            .padding(.horizontal, 24)
+            
+            // Biometric Info Text
+            Text("Use your \(biometricManager.getBiometricTypeString().lowercased()) to sign in securely")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(AppColors.mutedForeground)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .alert("Biometric Authentication", isPresented: $showingBiometricError) {
+            Button("OK") {
+                showingBiometricError = false
+            }
+        } message: {
+            Text(biometricErrorMessage)
+        }
+    }
+    
+    private func handleBiometricSignIn() {
+        // Check if biometric authentication is properly available
+        let testResult = biometricManager.testBiometricAvailability()
+        guard testResult.available else {
+            biometricErrorMessage = testResult.error ?? "Biometric authentication not available"
+            showingBiometricError = true
+            return
+        }
+        
+        guard biometricManager.isBiometricEnabled else {
+            biometricErrorMessage = "Biometric authentication is not enabled. Please enable it in your profile settings."
+            showingBiometricError = true
+            return
+        }
+        
+        isBiometricLoading = true
+        
+        Task {
+            do {
+                let result = await biometricManager.authenticateWithBiometrics()
+                
+                await MainActor.run {
+                    self.isBiometricLoading = false
+                    
+                    switch result {
+                    case .success(let token):
+                        guard !token.isEmpty else {
+                            self.biometricErrorMessage = "Invalid authentication token received"
+                            self.showingBiometricError = true
+                            return
+                        }
+                        // Verify token with backend and sign in
+                        self.authViewModel.signInWithBiometric(token: token)
+                        
+                    case .failure(let error):
+                        self.biometricErrorMessage = error.localizedDescription
+                        self.showingBiometricError = true
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isBiometricLoading = false
+                    self.biometricErrorMessage = "Authentication failed: \(error.localizedDescription)"
+                    self.showingBiometricError = true
+                }
+            }
+        }
     }
 }

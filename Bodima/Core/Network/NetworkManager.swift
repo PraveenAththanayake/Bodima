@@ -2,9 +2,20 @@ import Foundation
 
 class NetworkManager {
     static let shared = NetworkManager()
-    private let baseURL = "https://bodima-backend-api.vercel.app"
+    private let baseURL = "http://localhost:3000"
+    private let urlSession: URLSession
     
-    private init() {}
+    private init() {
+        // Configure URLSession for larger responses
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 60.0
+        config.timeoutIntervalForResource = 300.0
+        config.httpMaximumConnectionsPerHost = 10
+        config.urlCache = nil // Disable cache for large responses
+        
+        // Create custom URLSession with larger limits
+        self.urlSession = URLSession(configuration: config)
+    }
     
     // Non-actor-isolated token validation method
     private func isTokenExpired(token: String) -> Bool {
@@ -57,7 +68,7 @@ class NetworkManager {
         print("🔍 DEBUG - Making GET request to: \(url)")
         print("🔍 DEBUG - Method: \(endpoint.method.rawValue)")
         
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        urlSession.dataTask(with: request) { data, response, error in
             self.handleResponse(data: data, response: response, error: error, completion: completion)
         }.resume()
     }
@@ -108,7 +119,7 @@ class NetworkManager {
         print("🔍 DEBUG - Making request to: \(url)")
         print("🔍 DEBUG - Method: \(endpoint.method.rawValue)")
         
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        urlSession.dataTask(with: request) { data, response, error in
             self.handleResponse(data: data, response: response, error: error, completion: completion)
         }.resume()
     }
@@ -158,7 +169,7 @@ class NetworkManager {
         print("🔍 DEBUG - Method: \(endpoint.method.rawValue)")
         print("🔍 DEBUG - Headers: \(headers)")
         
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        urlSession.dataTask(with: request) { data, response, error in
             self.handleResponse(data: data, response: response, error: error, completion: completion)
         }.resume()
     }
@@ -187,7 +198,7 @@ class NetworkManager {
         print("🔍 DEBUG - Method: \(endpoint.method.rawValue)")
         print("🔍 DEBUG - Headers: \(headers)")
         
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        urlSession.dataTask(with: request) { data, response, error in
             self.handleResponse(data: data, response: response, error: error, completion: completion)
         }.resume()
     }
@@ -276,6 +287,8 @@ enum NetworkError: Error {
     case unauthorized
     case clientError(String)
     case serverError(String)
+    case resourceTooLarge
+    case timeout
     case unknownError
     
     var localizedDescription: String {
@@ -296,6 +309,10 @@ enum NetworkError: Error {
             return message
         case .serverError(let message):
             return message
+        case .resourceTooLarge:
+            return "Response too large - please try again or contact support"
+        case .timeout:
+            return "Request timed out - please check your connection"
         case .unknownError:
             return "Unknown error occurred"
         }
@@ -377,7 +394,7 @@ extension NetworkManager {
         print("🔍 DEBUG - Method: \(endpoint.method.rawValue)")
         print("🔍 DEBUG - Headers: \(headers)")
         
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        urlSession.dataTask(with: request) { data, response, error in
             self.handleJSONResponse(data: data, response: response, error: error, completion: completion)
         }.resume()
     }
@@ -448,6 +465,32 @@ extension NetworkManager {
             
         default:
             completion(.failure(NetworkError.unknownError))
+        }
+    }
+    
+    // MARK: - Async/Await Methods
+    func performRequest<T: Codable>(
+        endpoint: APIEndpoint,
+        method: String = "GET",
+        body: T? = nil
+    ) async throws -> APIResponse {
+        return try await withCheckedThrowingContinuation { continuation in
+            if let body = body {
+                self.request(
+                    endpoint: endpoint,
+                    body: body,
+                    responseType: APIResponse.self
+                ) { result in
+                    continuation.resume(with: result)
+                }
+            } else {
+                self.request(
+                    endpoint: endpoint,
+                    responseType: APIResponse.self
+                ) { result in
+                    continuation.resume(with: result)
+                }
+            }
         }
     }
 }

@@ -419,6 +419,78 @@ class HabitationViewModel: ObservableObject {
         }
     }
     
+    func fetchEnhancedHabitationsForCurrentUser() {
+        getUserIdFromProfile { [weak self] userId in
+            guard let userId = userId else {
+                self?.showError("User profile not found. Please complete your profile first.")
+                return
+            }
+            
+            self?.fetchEnhancedHabitationsByUserId(userId: userId)
+        }
+    }
+    
+    func fetchEnhancedHabitationsByUserId(userId: String) {
+        guard !userId.isEmpty else {
+            showError("User ID is required")
+            return
+        }
+        
+        guard let token = UserDefaults.standard.string(forKey: "auth_token") else {
+            showError("Authentication token not found. Please login again.")
+            return
+        }
+        
+        isFetchingEnhancedHabitations = true
+        clearError()
+        
+        let headers = [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json"
+        ]
+        
+        networkManager.requestWithHeaders(
+            endpoint: .getHabitationsByUserId(userId: userId),
+            headers: headers,
+            responseType: GetEnhancedHabitationsResponse.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isFetchingEnhancedHabitations = false
+                
+                switch result {
+                case .success(let response):
+                    print("🔍 DEBUG - GetEnhancedHabitationsByUserId success: \(response.success)")
+                    print("🔍 DEBUG - GetEnhancedHabitationsByUserId data count: \(response.data?.count ?? 0)")
+                    
+                    if response.success {
+                        self?.enhancedHabitations = response.data ?? []
+                        print("✅ Enhanced Habitations by user fetched successfully: \(self?.enhancedHabitations.count ?? 0) items")
+                        
+                        // Debug: Print enhanced habitation details
+                        self?.enhancedHabitations.forEach { habitation in
+                            print("📍 User Habitation: \(habitation.name) - Type: \(habitation.type)")
+                            print("   User: \(habitation.userFullName)")
+                            if let user = habitation.user {
+                                print("   City: \(user.city), District: \(user.district)")
+                            } else {
+                                print("   City: Unknown, District: Unknown")
+                            }
+                            print("   Pictures: \(habitation.pictures?.count ?? 0)")
+                            print("   Reserved: \(habitation.isReserved)")
+                            print("   Price: \(habitation.price)")
+                        }
+                    } else {
+                        self?.showError(response.message ?? "Failed to fetch user habitations")
+                    }
+                    
+                case .failure(let error):
+                    print("🔍 DEBUG - Fetch enhanced habitations by user error: \(error)")
+                    self?.handleNetworkError(error)
+                }
+            }
+        }
+    }
+    
     func fetchEnhancedHabitationById(habitationId: String) {
         guard !habitationId.isEmpty else {
             showError("Habitation ID is required")

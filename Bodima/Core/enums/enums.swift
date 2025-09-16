@@ -4,9 +4,3 @@ enum AlertType {
     case warning
     case info
 }
-
-//enum NetworkError: Error {
-//    case invalidURL
-//    case noData
-//    case decodingError
-//}

@@ -1,13 +1,17 @@
 enum APIEndpoint {
     case login
     case register
+    case verifyToken
     case createProfile(userId: String)
+    case updateProfile(userId: String)
     case getUserProfile(userId: String)
+    case getUserProfileByAuth(authId: String)
     case createHabitation
     case updateHabitation(habitationId: String)
     case deleteHabitation(habitationId: String)
     case addHabitaionImage(habitationId: String)
     case getHabitations
+    case getHabitationsByUserId(userId: String)
     case getLocationByHabitationId(habitationId: String)
     case getHabitationById(habitationId: String)
     case getFeaturesByHabitationId(habitationId: String)
@@ -15,12 +19,18 @@ enum APIEndpoint {
     case createHabitationFeature(habitationId: String)
     case createReservation
     case getReservation(reservationId: String)
-    case createPayement
+    case confirmReservation(reservationId: String)
+    case checkReservationExpiration(reservationId: String)
+    case createPayment
     case createStories
     case getUserStories
     case sendMessage
     case getNotifications
     case markNotificationAsRead(notificationId: String)
+    case getDashboard(userId: String)
+    case getDashboardSummary(userId: String)
+    case getAccessibilitySettings(userId: String)
+    case updateAccessibilitySettings(userId: String)
 
     var path: String {
         switch self {
@@ -28,10 +38,16 @@ enum APIEndpoint {
             return "/auth/login"
         case .register:
             return "/auth/register"
+        case .verifyToken:
+            return "/auth/verify-token"
         case .createProfile(let userId):
+            return "/users/\(userId)"
+        case .updateProfile(let userId):
             return "/users/\(userId)"
         case .getUserProfile(let userId):
             return "/users/\(userId)"
+        case .getUserProfileByAuth(let authId):
+            return "/users/\(authId)"
         case .createHabitation:
             return "/habitations"
         case .updateHabitation(let habitationId):
@@ -48,6 +64,8 @@ enum APIEndpoint {
             return "/habitation-feature/\(habitationId)"
         case .getHabitations:
             return "/habitations"
+        case .getHabitationsByUserId(let userId):
+            return "/habitations/user/\(userId)"
         case .getLocationByHabitationId(let habitationId):
             return "/locations/habitation/\(habitationId)"
         case .getFeaturesByHabitationId(let habitationId):
@@ -56,7 +74,11 @@ enum APIEndpoint {
             return "/reservations"
         case .getReservation(let reservationId):
             return "/reservations/\(reservationId)"
-        case .createPayement:
+        case .confirmReservation(let reservationId):
+            return "/reservations/\(reservationId)/confirm"
+        case .checkReservationExpiration(let reservationId):
+            return "/reservations/\(reservationId)/check-expiration"
+        case .createPayment:
             return "/payments"
         case .createStories:
             return "/user-stories"
@@ -68,16 +90,24 @@ enum APIEndpoint {
             return "/notifications"
         case .markNotificationAsRead(let notificationId):
             return "/notifications/\(notificationId)"
+        case .getDashboard(let userId):
+            return "/dashboard/\(userId)"
+        case .getDashboardSummary(let userId):
+            return "/dashboard/\(userId)/summary"
+        case .getAccessibilitySettings(let userId):
+            return "/users/\(userId)/accessibility"
+        case .updateAccessibilitySettings(let userId):
+            return "/users/\(userId)/accessibility"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .login, .register, .createProfile, .createHabitation, .createLocation, .createHabitationFeature, .addHabitaionImage, .createReservation, .createPayement, .createStories, .sendMessage, .markNotificationAsRead:
+        case .login, .register, .verifyToken, .createProfile, .createHabitation, .createLocation, .createHabitationFeature, .addHabitaionImage, .createReservation, .checkReservationExpiration, .createPayment, .createStories, .sendMessage, .markNotificationAsRead:
             return .POST
-        case .getUserProfile, .getHabitationById, .getHabitations, .getLocationByHabitationId, .getFeaturesByHabitationId, .getReservation, .getUserStories, .getNotifications:
+        case .getUserProfile, .getUserProfileByAuth, .getHabitationById, .getHabitations, .getHabitationsByUserId, .getLocationByHabitationId, .getFeaturesByHabitationId, .getReservation, .getUserStories, .getNotifications, .getDashboard, .getDashboardSummary, .getAccessibilitySettings:
             return .GET
-        case .updateHabitation:
+        case .updateProfile, .updateHabitation, .confirmReservation, .updateAccessibilitySettings:
             return .PUT
         case .deleteHabitation:
             return .DELETE
