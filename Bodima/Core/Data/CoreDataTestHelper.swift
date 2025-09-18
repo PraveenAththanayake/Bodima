@@ -108,16 +108,9 @@ class CoreDataTestHelper {
         
         let testUserData = EnhancedUserData(
             id: "test-user-123",
-            auth: "test-auth",
             firstName: "Test",
             lastName: "User",
-            bio: "Test user for Core Data",
-            phoneNumber: "+1234567890",
-            addressNo: "123",
-            addressLine1: "Test Street",
-            addressLine2: "Test City",
-            city: "Test City",
-            district: "Test District"
+            phoneNumber: "+1234567890"
         )
         
         let testPicture = HabitationPicture(

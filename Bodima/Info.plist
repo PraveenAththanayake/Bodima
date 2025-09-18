@@ -6,5 +6,9 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Bodima needs access to your calendar to add reservation dates and help you keep track of your bookings.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Use Face ID to sign in to Bodima securely and quickly access your account.</string>
 </dict>
 </plist>

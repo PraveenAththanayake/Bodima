@@ -51,20 +51,17 @@ struct GetHabitationByIdResponse: Codable {
 // MARK: - New Enhanced Models for Full API Response (Updated with Price)
 struct EnhancedUserData: Codable {
     let id: String
-    let auth: String
     let firstName: String
     let lastName: String
-    let bio: String
     let phoneNumber: String
-    let addressNo: String
-    let addressLine1: String
-    let addressLine2: String
-    let city: String
-    let district: String
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case auth, firstName, lastName, bio, phoneNumber, addressNo, addressLine1, addressLine2, city, district
+        case firstName, lastName, phoneNumber
+    }
+    
+    var fullName: String {
+        return "\(firstName) \(lastName)"
     }
 }
 
@@ -99,23 +96,27 @@ struct EnhancedHabitationData: Codable, Identifiable {
         case price
     }
     
-    // Custom decoding to handle null user field
+    // MARK: - Custom Decoding
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         description = try container.decode(String.self, forKey: .description)
-        type = try container.decode(String.self, forKey: .type)
-        isReserved = try container.decode(Bool.self, forKey: .isReserved)
-        createdAt = try container.decode(String.self, forKey: .createdAt)
-        updatedAt = try container.decode(String.self, forKey: .updatedAt)
-        v = try container.decode(Int.self, forKey: .v)
         price = try container.decode(Int.self, forKey: .price)
-        pictures = try container.decodeIfPresent([HabitationPicture].self, forKey: .pictures)
+        type = try container.decode(String.self, forKey: .type)
+        isReserved = try container.decodeIfPresent(Bool.self, forKey: .isReserved) ?? false
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt) ?? ""
+        
+        // Handle optional __v field
+        v = try container.decodeIfPresent(Int.self, forKey: .v) ?? 0
         
         // Handle null user field
         user = try container.decodeIfPresent(EnhancedUserData.self, forKey: .user)
+        
+        // Handle pictures
+        pictures = try container.decodeIfPresent([HabitationPicture].self, forKey: .pictures)
     }
     
     var userFullName: String {

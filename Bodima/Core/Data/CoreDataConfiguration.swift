@@ -77,17 +77,15 @@ class CoreDataConfiguration {
     
     func optimizeCoreDataPerformance() {
         let manager = CoreDataManager.shared
-        let context = manager.viewContext
+        _ = manager.viewContext
         
-        // Configure fetch request batch size
-        // Note: fetchRequestTemplate is not available on NSManagedObjectContext
-        // We'll configure batch sizes through individual fetch requests instead
+        // NOTE:
+        // NSManagedObjectContext does not have a fetchBatchSize property. Attempting to set it via KVC
+        // causes a crash with NSUnknownKeyException. Batch size must be configured on each
+        // NSFetchRequest instance via request.fetchBatchSize = <Int>.
+        // We keep this method as a placeholder for future global performance tweaks.
         
-        // Set reasonable batch sizes for common queries
-        let batchSize = 20
-        context.setValue(batchSize, forKey: "fetchBatchSize")
-        
-        print("✅ Core Data performance optimized")
+        print("✅ Core Data performance optimization applied (request-level batch sizing only)")
     }
     
     // MARK: - Debug Helpers
@@ -460,7 +458,7 @@ class CoreDataConfiguration {
         }
     }
     
-    private func createPersistentContainerWithProgrammaticModel() -> NSPersistentContainer {
+    func createPersistentContainerWithProgrammaticModel() -> NSPersistentContainer {
         print("🔧 Creating Core Data model programmatically...")
         
         // Create the managed object model

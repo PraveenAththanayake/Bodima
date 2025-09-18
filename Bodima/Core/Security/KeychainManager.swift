@@ -12,8 +12,11 @@ class KeychainManager {
     
     // MARK: - Biometric Token Management
     func saveBiometricToken(_ token: String) -> Bool {
+        print("🔐 KeychainManager: Attempting to save biometric token")
+        print("🔐 Token length: \(token.count)")
+        
         guard let tokenData = token.data(using: .utf8) else {
-            print("Failed to convert token to data")
+            print("🔴 Failed to convert token to data")
             return false
         }
         
@@ -26,20 +29,25 @@ class KeychainManager {
         ]
         
         // Delete existing item first
-        SecItemDelete(query as CFDictionary)
+        let deleteStatus = SecItemDelete(query as CFDictionary)
+        print("🔐 Delete existing token status: \(deleteStatus)")
         
         // Add new item
         let status = SecItemAdd(query as CFDictionary, nil)
         let success = status == errSecSuccess
         
-        if !success {
-            print("Failed to save biometric token. Status: \(status)")
+        if success {
+            print("🔐 ✅ Biometric token saved successfully")
+        } else {
+            print("🔴 Failed to save biometric token. Status: \(status)")
         }
         
         return success
     }
     
     func getBiometricToken() -> String? {
+        print("🔐 KeychainManager: Attempting to retrieve biometric token")
+        
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -51,12 +59,16 @@ class KeychainManager {
         var dataTypeRef: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
         
+        print("🔐 Keychain retrieval status: \(status)")
+        
         guard status == errSecSuccess,
               let data = dataTypeRef as? Data,
               let token = String(data: data, encoding: .utf8) else {
+            print("🔴 No biometric token found in keychain or failed to retrieve")
             return nil
         }
         
+        print("🔐 ✅ Biometric token retrieved successfully, length: \(token.count)")
         return token
     }
     

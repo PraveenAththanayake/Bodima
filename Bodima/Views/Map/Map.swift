@@ -1,12 +1,14 @@
 import SwiftUI
 import MapKit
 import UIKit
+import CoreLocation
 
 struct MapView: View {
     @StateObject private var habitationViewModel = HabitationViewModel()
     @StateObject private var profileViewModel = ProfileViewModel()
     @StateObject private var locationViewModel = HabitationLocationViewModel()
     @StateObject private var featureViewModel = HabitationFeatureViewModel()
+    @State private var locationManager = CLLocationManager()
     @State private var currentUserId: String?
     @State private var locationDataCache: [String: LocationData] = [:]
     @State private var featureDataCache: [String: HabitationFeatureData] = [:]
@@ -14,12 +16,18 @@ struct MapView: View {
     @State private var pendingFeatureRequests: Set<String> = []
     
     @State private var region = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 7.8731, longitude: 80.7718), // Sri Lanka center
+        center: CLLocationCoordinate2D(latitude: 7.8731, longitude: 80.7718),
         span: MKCoordinateSpan(latitudeDelta: 2.0, longitudeDelta: 2.0)
     )
     
+    @State private var userLocation: CLLocationCoordinate2D? = nil
+    @State private var isLoadingLocation = false
     @State private var selectedHabitation: EnhancedHabitationData? = nil
     @State private var showingDetails = false
+    @State private var showingRoutePopup = false
+    @State private var routeDistance: CLLocationDistance = 0
+    @State private var routePolyline: MKPolyline? = nil
+    @State private var isCalculatingRoute = false
     
     let profileId: String
     
@@ -35,7 +43,6 @@ struct MapView: View {
                 return nil
             }
             
-            // Fixed: Remove Double() conversion since latitude/longitude are already Double
             let latitude = locationData.latitude
             let longitude = locationData.longitude
             
@@ -46,36 +53,53 @@ struct MapView: View {
         }
     }
     
+    // All map annotations including user location and habitations
+    private var allMapAnnotations: [MapAnnotationItem] {
+        var annotations: [MapAnnotationItem] = []
+        
+        // Add user location if available
+        if let userLocation = userLocation {
+            annotations.append(MapAnnotationItem(
+                id: "user_location",
+                coordinate: userLocation,
+                type: .userLocation
+            ))
+        }
+        
+        // Add habitation annotations
+        for habitation in habitationAnnotations {
+            annotations.append(MapAnnotationItem(
+                id: habitation.id.uuidString,
+                coordinate: habitation.coordinate,
+                type: .habitation(habitation.habitation)
+            ))
+        }
+        
+        return annotations
+    }
+    
     var body: some View {
         ZStack {
-            // Map View
             mapView
             
-            // Header
             VStack {
-                headerView
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(AppColors.background)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(AppColors.border, lineWidth: 1)
-                            )
-                            .shadow(color: AppColors.border.opacity(0.1), radius: 8, x: 0, y: 4)
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                MapHeaderComponent(
+                    habitationCount: habitationAnnotations.count,
+                    onResetLocation: resetLocation,
+                    onRefresh: loadData
+                )
                 
                 Spacer()
                 
-                // Loading indicator
-                loadingIndicator
+                MapLoadingComponent(
+                    isLoading: habitationViewModel.isFetchingEnhancedHabitations
+                )
             }
         }
         .onAppear {
             loadData()
+            setupLocationManager()
+            getCurrentLocation()
         }
         .refreshable {
             loadData()
@@ -125,176 +149,65 @@ struct MapView: View {
                 )
             }
         }
+        .overlay(
+            routePopupOverlay
+        )
     }
     
-    // Fix 3: Break up complex expressions into smaller computed properties
     private var mapView: some View {
-        Map(coordinateRegion: $region, annotationItems: habitationAnnotations) { annotation in
+        Map(coordinateRegion: $region, annotationItems: allMapAnnotations) { annotation in
             MapAnnotation(coordinate: annotation.coordinate) {
-                mapAnnotationButton(for: annotation)
+                mapAnnotationView(for: annotation)
             }
         }
         .mapStyle(.standard(elevation: .realistic))
         .ignoresSafeArea()
     }
     
-    private func mapAnnotationButton(for annotation: HabitationMapAnnotation) -> some View {
-        Button(action: {
-            selectedHabitation = annotation.habitation
-            showingDetails = true
-        }) {
-            annotationView(for: annotation)
-        }
-        .buttonStyle(.plain)
-    }
-    
-    private func annotationView(for annotation: HabitationMapAnnotation) -> some View {
-        VStack(spacing: 4) {
-            annotationIcon(for: annotation)
-            
-            // Show name and price only when zoomed in
-            if isZoomedIn {
-                annotationLabel(for: annotation)
+    @ViewBuilder
+    private func mapAnnotationView(for annotation: MapAnnotationItem) -> some View {
+        MapAnnotationComponent(
+            annotation: annotation,
+            isZoomedIn: isZoomedIn,
+            onHabitationTap: { habitation, coordinate in
+                selectedHabitation = habitation
+                if let userLoc = userLocation {
+                    calculateRouteAndShowPopup(from: userLoc, to: coordinate, habitation: habitation)
+                } else {
+                    showingDetails = true
+                }
             }
-        }
-    }
-    
-    private func annotationIcon(for annotation: HabitationMapAnnotation) -> some View {
-        Image(systemName: getHabitationIcon(for: annotation.habitation.type))
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 32, height: 32)
-            .background(getHabitationColor(for: annotation.habitation.type))
-            .clipShape(Circle())
-            .overlay(
-                Circle()
-                    .stroke(.white, lineWidth: 2)
-            )
-            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-    }
-    
-    private func annotationLabel(for annotation: HabitationMapAnnotation) -> some View {
-        VStack(spacing: 2) {
-            Text(annotation.habitation.name)
-                .font(.caption2.bold())
-                .foregroundStyle(AppColors.foreground)
-                .lineLimit(1)
-            
-            Text(annotation.habitation.type)
-                .font(.caption2)
-                .foregroundStyle(AppColors.primary)
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(AppColors.background)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(AppColors.border, lineWidth: 1)
-                )
         )
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
     }
+    
     
     @ViewBuilder
-    private var loadingIndicator: some View {
-        if habitationViewModel.isFetchingEnhancedHabitations {
-            HStack {
-                ProgressView()
-                    .scaleEffect(0.8)
-                Text("Loading habitations...")
-                    .font(.caption)
-                    .foregroundStyle(AppColors.mutedForeground)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(AppColors.background)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(AppColors.border, lineWidth: 1)
-                    )
-                    .shadow(color: AppColors.border.opacity(0.1), radius: 4, x: 0, y: 2)
+    private var routePopupOverlay: some View {
+        if showingRoutePopup, let habitation = selectedHabitation {
+            RoutePopupComponent(
+                habitation: habitation,
+                routeDistance: routeDistance,
+                isCalculatingRoute: isCalculatingRoute,
+                onClose: {
+                    showingRoutePopup = false
+                    routePolyline = nil
+                },
+                onSeeDetails: {
+                    showingRoutePopup = false
+                    showingDetails = true
+                }
             )
-            .padding(.horizontal, 16)
-            .padding(.bottom, 100)
         }
     }
     
-    private var headerView: some View {
-        HStack(alignment: .center, spacing: 12) {
-            headerTitle
-            Spacer()
-            headerButtons
+    private func resetLocation() {
+        withAnimation(.easeInOut(duration: 0.8)) {
+            region = MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 7.8731, longitude: 80.7718),
+                span: MKCoordinateSpan(latitudeDelta: 2.0, longitudeDelta: 2.0)
+            )
         }
     }
-    
-    private var headerTitle: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Bodima")
-                .font(.title2.bold())
-                .foregroundStyle(AppColors.foreground)
-            
-            Text("Explore Places (\(habitationAnnotations.count))")
-                .font(.caption)
-                .foregroundStyle(AppColors.mutedForeground)
-        }
-    }
-    
-    private var headerButtons: some View {
-        HStack(spacing: 12) {
-            resetLocationButton
-            refreshButton
-        }
-    }
-    
-    private var resetLocationButton: some View {
-        Button(action: {
-            // Reset to Sri Lanka view
-            withAnimation(.easeInOut(duration: 0.8)) {
-                region = MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: 7.8731, longitude: 80.7718),
-                    span: MKCoordinateSpan(latitudeDelta: 2.0, longitudeDelta: 2.0)
-                )
-            }
-        }) {
-            Image(systemName: "location")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(AppColors.foreground)
-                .frame(width: 44, height: 44)
-                .background(AppColors.input)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(AppColors.border, lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Reset view")
-    }
-    
-    private var refreshButton: some View {
-        Button(action: {
-            loadData()
-        }) {
-            Image(systemName: "arrow.clockwise")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(AppColors.foreground)
-                .frame(width: 44, height: 44)
-                .background(AppColors.input)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(AppColors.border, lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Refresh")
-    }
-    
-    // MARK: - Helper Methods
     
     private func loadData() {
         habitationViewModel.fetchAllEnhancedHabitations()
@@ -307,6 +220,110 @@ struct MapView: View {
         pendingFeatureRequests.removeAll()
         locationDataCache.removeAll()
         featureDataCache.removeAll()
+    }
+    
+    private func setupLocationManager() {
+        locationManager.delegate = LocationDelegate(onLocationUpdate: { location in
+            DispatchQueue.main.async {
+                userLocation = location.coordinate
+                isLoadingLocation = false
+            }
+        })
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.requestWhenInUseAuthorization()
+    }
+    
+    private func getCurrentLocation() {
+        // Use hardcoded location for simulator (Colombo, Sri Lanka)
+        #if targetEnvironment(simulator)
+        userLocation = CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612)
+        isLoadingLocation = false
+        #else
+        guard locationManager.authorizationStatus == .authorizedWhenInUse || 
+              locationManager.authorizationStatus == .authorizedAlways else {
+            // Fallback to hardcoded location if permission denied
+            userLocation = CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612)
+            return
+        }
+        
+        isLoadingLocation = true
+        locationManager.requestLocation()
+        #endif
+    }
+    
+    private func calculateRouteAndShowPopup(from userLoc: CLLocationCoordinate2D, to habitationLoc: CLLocationCoordinate2D, habitation: EnhancedHabitationData) {
+        isCalculatingRoute = true
+        showingRoutePopup = true
+        
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: userLoc))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: habitationLoc))
+        request.transportType = .walking
+        
+        let directions = MKDirections(request: request)
+        directions.calculate { response, error in
+            DispatchQueue.main.async {
+                isCalculatingRoute = false
+                
+                if let route = response?.routes.first {
+                    routeDistance = route.distance
+                    routePolyline = route.polyline
+                    
+                    // Adjust map region to show both points
+                    adjustMapRegionForRoute(userLoc: userLoc, habitationLoc: habitationLoc)
+                } else {
+                    // Fallback to straight-line distance
+                    let userLocation = CLLocation(latitude: userLoc.latitude, longitude: userLoc.longitude)
+                    let habitationLocation = CLLocation(latitude: habitationLoc.latitude, longitude: habitationLoc.longitude)
+                    routeDistance = userLocation.distance(from: habitationLocation)
+                }
+            }
+        }
+    }
+    
+    private func adjustMapRegionForRoute(userLoc: CLLocationCoordinate2D, habitationLoc: CLLocationCoordinate2D) {
+        let minLat = min(userLoc.latitude, habitationLoc.latitude)
+        let maxLat = max(userLoc.latitude, habitationLoc.latitude)
+        let minLon = min(userLoc.longitude, habitationLoc.longitude)
+        let maxLon = max(userLoc.longitude, habitationLoc.longitude)
+        
+        let center = CLLocationCoordinate2D(
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLon + maxLon) / 2
+        )
+        
+        let span = MKCoordinateSpan(
+            latitudeDelta: max(maxLat - minLat, 0.01) * 1.5,
+            longitudeDelta: max(maxLon - minLon, 0.01) * 1.5
+        )
+        
+        withAnimation(.easeInOut(duration: 1.0)) {
+            region = MKCoordinateRegion(center: center, span: span)
+        }
+    }
+    
+    private func formatDistance(_ distance: CLLocationDistance) -> String {
+        if distance < 1000 {
+            return String(format: "%.0f m", distance)
+        } else {
+            return String(format: "%.1f km", distance / 1000)
+        }
+    }
+    
+    private func formatTravelTime(_ distance: CLLocationDistance) -> String {
+        // Assume average walking speed of 5 km/h (1.39 m/s)
+        let timeInSeconds = distance / 1.39
+        let minutes = Int(timeInSeconds / 60)
+        
+        if minutes < 1 {
+            return "< 1 min"
+        } else if minutes < 60 {
+            return "\(minutes) min"
+        } else {
+            let hours = minutes / 60
+            let remainingMinutes = minutes % 60
+            return "\(hours)h \(remainingMinutes)m"
+        }
     }
     
     private func fetchLocationForHabitation(habitationId: String) {
@@ -347,45 +364,6 @@ struct MapView: View {
         }
     }
     
-    private func getHabitationIcon(for type: String) -> String {
-        switch type.lowercased() {
-        case "apartment":
-            return "building.2.fill"
-        case "house":
-            return "house.fill"
-        case "room":
-            return "bed.double.fill"
-        case "hostel":
-            return "building.fill"
-        case "studio":
-            return "square.fill"
-        default:
-            return "house.fill"
-        }
-    }
-    
-    private func getHabitationColor(for type: String) -> Color {
-        switch type.lowercased() {
-        case "apartment":
-            return AppColors.primary
-        case "house":
-            return .green
-        case "room":
-            return .orange
-        case "hostel":
-            return .purple
-        case "studio":
-            return .pink
-        default:
-            return AppColors.primary
-        }
-    }
-}
-
-struct HabitationMapAnnotation: Identifiable {
-    let id = UUID()
-    let habitation: EnhancedHabitationData
-    let coordinate: CLLocationCoordinate2D
 }
 
 struct HabitationDetailSheet: View {
@@ -515,7 +493,7 @@ struct HabitationDetailSheet: View {
                 .foregroundStyle(AppColors.mutedForeground)
             
             if let user = habitation.user {
-                Text("\(user.city), \(user.district)")
+                Text("\(user.phoneNumber)")
                     .font(.subheadline)
                     .foregroundStyle(AppColors.mutedForeground)
             } else {
@@ -566,7 +544,7 @@ struct HabitationDetailSheet: View {
                             .font(.subheadline.bold())
                             .foregroundStyle(AppColors.foreground)
                         
-                        Text("@\(user.auth)")
+                        Text("@\(user.fullName)")
                             .font(.caption)
                             .foregroundStyle(AppColors.mutedForeground)
                     }

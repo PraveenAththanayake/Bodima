@@ -16,8 +16,16 @@ struct EmptyBody: Codable {
 struct CreateReservationRequest: Codable {
     let user: String
     let habitation: String
+    let checkInDate: String
+    let checkOutDate: String
     let reservedDateTime: String
     let reservationEndDateTime: String
+}
+
+struct CheckAvailabilityRequest: Codable {
+    let habitationId: String
+    let checkInDate: String
+    let checkOutDate: String
 }
 
 // MARK: - Basic Reservation Response Models
@@ -25,18 +33,22 @@ struct ReservationData: Codable, Identifiable {
     let id: String
     let user: String
     let habitation: String
+    let checkInDate: String
+    let checkOutDate: String
     let reservedDateTime: String
     let reservationEndDateTime: String
     let status: String
     let paymentDeadline: String
     let isPaymentCompleted: Bool
+    let totalDays: Int
+    let totalAmount: Int
     let createdAt: String
     let updatedAt: String
     let v: Int
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case user, habitation, reservedDateTime, reservationEndDateTime, status, paymentDeadline, isPaymentCompleted, createdAt, updatedAt
+        case user, habitation, checkInDate, checkOutDate, reservedDateTime, reservationEndDateTime, status, paymentDeadline, isPaymentCompleted, totalDays, totalAmount, createdAt, updatedAt
         case v = "__v"
     }
 }
@@ -53,23 +65,28 @@ struct GetReservationResponse: Codable {
     let message: String?
 }
 
+
 // MARK: - Enhanced Reservation Models with Population
 struct EnhancedReservationData: Codable, Identifiable {
     let id: String
     let user: EnhancedUserData?
     let habitation: EnhancedHabitationData?
+    let checkInDate: String
+    let checkOutDate: String
     let reservedDateTime: String
     let reservationEndDateTime: String
     let status: String
     let paymentDeadline: String
     let isPaymentCompleted: Bool
+    let totalDays: Int
+    let totalAmount: Int
     let createdAt: String
     let updatedAt: String
     let v: Int
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
-        case user, habitation, reservedDateTime, reservationEndDateTime, status, paymentDeadline, isPaymentCompleted, createdAt, updatedAt
+        case user, habitation, checkInDate, checkOutDate, reservedDateTime, reservationEndDateTime, status, paymentDeadline, isPaymentCompleted, totalDays, totalAmount, createdAt, updatedAt
         case v = "__v"
     }
     
@@ -78,11 +95,15 @@ struct EnhancedReservationData: Codable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         
         id = try container.decode(String.self, forKey: .id)
+        checkInDate = try container.decode(String.self, forKey: .checkInDate)
+        checkOutDate = try container.decode(String.self, forKey: .checkOutDate)
         reservedDateTime = try container.decode(String.self, forKey: .reservedDateTime)
         reservationEndDateTime = try container.decode(String.self, forKey: .reservationEndDateTime)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "pending"
         paymentDeadline = try container.decodeIfPresent(String.self, forKey: .paymentDeadline) ?? ""
         isPaymentCompleted = try container.decodeIfPresent(Bool.self, forKey: .isPaymentCompleted) ?? false
+        totalDays = try container.decodeIfPresent(Int.self, forKey: .totalDays) ?? 1
+        totalAmount = try container.decodeIfPresent(Int.self, forKey: .totalAmount) ?? 0
         createdAt = try container.decode(String.self, forKey: .createdAt)
         updatedAt = try container.decode(String.self, forKey: .updatedAt)
         v = try container.decode(Int.self, forKey: .v)
@@ -155,5 +176,114 @@ struct GetReservationsResponse: Codable {
 struct GetEnhancedReservationsResponse: Codable {
     let success: Bool
     let data: [EnhancedReservationData]?
+    let message: String?
+}
+
+// MARK: - User Reservation History Models
+struct UserReservationHistory: Codable {
+    let current: [EnhancedReservationData]
+    let upcoming: [EnhancedReservationData]
+    let past: [EnhancedReservationData]
+    let total: Int
+}
+
+struct GetUserReservationHistoryResponse: Codable {
+    let success: Bool
+    let data: UserReservationHistory?
+    let message: String?
+}
+
+// MARK: - Date Availability Models
+struct ReservedDateRange: Codable, Identifiable {
+    let id: String
+    let checkInDate: String
+    let checkOutDate: String
+    let status: String
+    let user: ReservationUser?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, checkInDate, checkOutDate, status, user
+        case _id = "_id"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Try to decode id from either "id" or "_id" key
+        if let idValue = try? container.decode(String.self, forKey: .id) {
+            self.id = idValue
+        } else if let idValue = try? container.decode(String.self, forKey: ._id) {
+            self.id = idValue
+        } else {
+            throw DecodingError.keyNotFound(CodingKeys.id, DecodingError.Context(
+                codingPath: decoder.codingPath,
+                debugDescription: "No value found for id or _id"
+            ))
+        }
+        
+        self.checkInDate = try container.decode(String.self, forKey: .checkInDate)
+        self.checkOutDate = try container.decode(String.self, forKey: .checkOutDate)
+        self.status = try container.decode(String.self, forKey: .status)
+        self.user = try container.decodeIfPresent(ReservationUser.self, forKey: .user)
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        
+        try container.encode(id, forKey: .id)
+        try container.encode(checkInDate, forKey: .checkInDate)
+        try container.encode(checkOutDate, forKey: .checkOutDate)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(user, forKey: .user)
+    }
+}
+
+struct ReservationUser: Codable {
+    let id: String
+    let firstName: String?
+    let lastName: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case firstName, lastName
+    }
+    
+    var fullName: String {
+        let first = firstName ?? ""
+        let last = lastName ?? ""
+        return "\(first) \(last)".trimmingCharacters(in: .whitespaces)
+    }
+}
+
+struct AvailabilityData: Codable {
+    let isAvailable: Bool
+    let conflictingReservations: [ReservedDateRange]?
+}
+
+struct CheckAvailabilityResponse: Codable {
+    let success: Bool
+    let data: AvailabilityData?
+    let message: String?
+}
+
+struct GetReservedDatesResponse: Codable {
+    let success: Bool
+    let data: [ReservedDateRange]?
+    let message: String?
+}
+
+struct AvailableDateRange: Codable {
+    let startDate: String
+    let endDate: String
+}
+
+struct HabitationAvailabilityData: Codable {
+    let availableDates: [AvailableDateRange]
+    let reservedDates: [ReservedDateRange]
+}
+
+struct GetHabitationAvailabilityResponse: Codable {
+    let success: Bool
+    let data: HabitationAvailabilityData?
     let message: String?
 }

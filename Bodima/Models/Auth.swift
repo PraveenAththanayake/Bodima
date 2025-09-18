@@ -22,12 +22,14 @@ struct TokenVerificationResponse: Codable {
     let message: String
     let userData: User?
     let isValid: Bool?
+    let isUserProfileAvailable: Bool?
     
     enum CodingKeys: String, CodingKey {
         case success
         case message
-        case userData = "user"
+        case userData = "userData"
         case isValid
+        case isUserProfileAvailable
     }
 }
 

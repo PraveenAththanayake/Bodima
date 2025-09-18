@@ -67,16 +67,9 @@ extension DashboardHabitation {
 extension EnhancedUserData {
     init(from coreData: NSManagedObject) {
         self.id = coreData.value(forKey: "id") as? String ?? ""
-        self.auth = "" // Not stored in Core Data
         self.firstName = coreData.value(forKey: "firstName") as? String ?? ""
         self.lastName = coreData.value(forKey: "lastName") as? String ?? ""
-        self.bio = coreData.value(forKey: "bio") as? String ?? ""
         self.phoneNumber = coreData.value(forKey: "phoneNumber") as? String ?? ""
-        self.addressNo = coreData.value(forKey: "addressNo") as? String ?? ""
-        self.addressLine1 = coreData.value(forKey: "addressLine1") as? String ?? ""
-        self.addressLine2 = coreData.value(forKey: "addressLine2") as? String ?? ""
-        self.city = coreData.value(forKey: "city") as? String ?? ""
-        self.district = coreData.value(forKey: "district") as? String ?? ""
     }
 }
 

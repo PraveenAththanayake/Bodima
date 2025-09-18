@@ -1,318 +1,122 @@
 import Foundation
 
-// MARK: - Nested Habitation Model for Location Response
-struct LocationHabitation: Codable {
-    let id: String
-    let user: String
-    let name: String
-    let description: String
-    let type: String
-    let isReserved: Bool
-    let price: Int
-    let createdAt: String
-    let updatedAt: String
-    let v: Int
-    
-    enum CodingKeys: String, CodingKey {
-        case id = "_id"
-        case user
-        case name
-        case description
-        case type
-        case isReserved
-        case price
-        case createdAt
-        case updatedAt
-        case v = "__v"
-    }
-}
-
-// MARK: - Flexible LocationData that handles both String and Object habitation
-struct LocationData: Codable, Identifiable {
-    let id: String
-    let habitationId: String
-    let habitationDetails: LocationHabitation?
-    let addressNo: String
-    let addressLine01: String
-    let addressLine02: String
-    let city: String
-    let district: String
-    let latitude: Double
-    let longitude: Double
-    let nearestHabitationLatitude: Double
-    let nearestHabitationLongitude: Double
-    let createdAt: String
-    let updatedAt: String
-    let v: Int
-    
-    // Computed property for backward compatibility
-    var habitation: LocationHabitation {
-        return habitationDetails ?? LocationHabitation(
-            id: habitationId,
-            user: "",
-            name: "Unknown",
-            description: "",
-            type: "Unknown",
-            isReserved: false,
-            price: 0,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            v: 0
-        )
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case id = "_id"
-        case habitation
-        case addressNo
-        case addressLine01
-        case addressLine02
-        case city
-        case district
-        case latitude
-        case longitude
-        case nearestHabitationLatitude
-        case nearestHabitationLongitude
-        case createdAt
-        case updatedAt
-        case v = "__v"
-    }
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        
-        id = try container.decode(String.self, forKey: .id)
-        addressNo = try container.decode(String.self, forKey: .addressNo)
-        addressLine01 = try container.decode(String.self, forKey: .addressLine01)
-        addressLine02 = try container.decode(String.self, forKey: .addressLine02)
-        city = try container.decode(String.self, forKey: .city)
-        district = try container.decode(String.self, forKey: .district)
-        latitude = try container.decode(Double.self, forKey: .latitude)
-        longitude = try container.decode(Double.self, forKey: .longitude)
-        nearestHabitationLatitude = try container.decode(Double.self, forKey: .nearestHabitationLatitude)
-        nearestHabitationLongitude = try container.decode(Double.self, forKey: .nearestHabitationLongitude)
-        createdAt = try container.decode(String.self, forKey: .createdAt)
-        updatedAt = try container.decode(String.self, forKey: .updatedAt)
-        v = try container.decode(Int.self, forKey: .v)
-        
-        
-        if let habitationString = try? container.decode(String.self, forKey: .habitation) {
-            habitationId = habitationString
-            habitationDetails = nil
-            print("🔍 DEBUG - Decoded habitation as String ID: \(habitationString)")
-        } else if let habitationObject = try? container.decode(LocationHabitation.self, forKey: .habitation) {
-           
-            habitationId = habitationObject.id
-            habitationDetails = habitationObject
-            print("🔍 DEBUG - Decoded habitation as Object with ID: \(habitationObject.id)")
-        } else {
-           
-            let habitationValue = try container.decode(String.self, forKey: .habitation)
-            habitationId = habitationValue
-            habitationDetails = nil
-            print("🔍 DEBUG - Fallback: Decoded habitation as String: \(habitationValue)")
-        }
-    }
-    
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        
-        try container.encode(id, forKey: .id)
-        try container.encode(addressNo, forKey: .addressNo)
-        try container.encode(addressLine01, forKey: .addressLine01)
-        try container.encode(addressLine02, forKey: .addressLine02)
-        try container.encode(city, forKey: .city)
-        try container.encode(district, forKey: .district)
-        try container.encode(latitude, forKey: .latitude)
-        try container.encode(longitude, forKey: .longitude)
-        try container.encode(nearestHabitationLatitude, forKey: .nearestHabitationLatitude)
-        try container.encode(nearestHabitationLongitude, forKey: .nearestHabitationLongitude)
-        try container.encode(createdAt, forKey: .createdAt)
-        try container.encode(updatedAt, forKey: .updatedAt)
-        try container.encode(v, forKey: .v)
-        
-        // Encode based on what we have
-        if let details = habitationDetails {
-            try container.encode(details, forKey: .habitation)
-        } else {
-            try container.encode(habitationId, forKey: .habitation)
-        }
-    }
-}
-
-// MARK: - Response Models
-struct GetLocationResponse: Codable {
-    let success: Bool
-    let data: LocationData?
-    let message: String?
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        success = try container.decode(Bool.self, forKey: .success)
-        data = try container.decodeIfPresent(LocationData.self, forKey: .data)
-        message = try container.decodeIfPresent(String.self, forKey: .message)
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case success, data, message
-    }
-}
-
-struct CreateLocationRequest: Codable {
-    let habitation: String
-    let addressNo: String
-    let addressLine01: String
-    let addressLine02: String
-    let city: String
-    let district: String
-    let latitude: Double
-    let longitude: Double
-    let nearestHabitationLatitude: Double
-    let nearestHabitationLongitude: Double
-}
-
-struct CreateLocationResponse: Codable {
-    let success: Bool
-    let message: String
-    let data: LocationData?
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        success = try container.decode(Bool.self, forKey: .success)
-        message = try container.decode(String.self, forKey: .message)
-        
-        // Handle potential decoding errors for data
-        do {
-            data = try container.decodeIfPresent(LocationData.self, forKey: .data)
-        } catch {
-            print("🔍 DEBUG - Error decoding location data: \(error)")
-            data = nil
-        }
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case success, message, data
-    }
-}
-
-enum LocationError: Error, LocalizedError {
-    case invalidHabitationId
-    case locationNotFound
-    case networkError(String)
-    case invalidCoordinates
-    case missingAddress
-    case decodingError(String)
-    
-    var errorDescription: String? {
-        switch self {
-        case .invalidHabitationId:
-            return "Invalid habitation ID provided"
-        case .locationNotFound:
-            return "Location not found"
-        case .networkError(let message):
-            return "Network error: \(message)"
-        case .invalidCoordinates:
-            return "Invalid coordinates provided"
-        case .missingAddress:
-            return "Address information is required"
-        case .decodingError(let message):
-            return "Data decoding error: \(message)"
-        }
-    }
-}
+/**
+ * ViewModel for managing habitation location operations in the Bodima application.
+ * Handles location creation, retrieval, validation, and geographical operations.
+ * 
+ * This ViewModel provides:
+ * - Location creation with comprehensive validation
+ * - Location retrieval with intelligent caching
+ * - Geographical calculations and coordinate formatting
+ * - Address formatting and validation
+ * - Integration with NetworkManager for API communication
+ * - Comprehensive error handling and user feedback
+ */
 
 @MainActor
 class HabitationLocationViewModel: ObservableObject {
+    
+    // MARK: - Published Properties
+    
+    /// Array of all location data loaded in the application
     @Published var locations: [LocationData] = []
+    
+    /// Currently selected location for display or operations
     @Published var selectedLocation: LocationData?
+    
+    /// General loading state indicator
     @Published var isLoading = false
+    
+    /// General error message for display
     @Published var errorMessage: String?
+    
+    /// Boolean flag indicating if there's an active error
     @Published var hasError = false
     
+    /// Loading state specifically for location creation operations
     @Published var isCreatingLocation = false
+    
+    /// Success state for location creation operations
     @Published var locationCreationSuccess = false
+    
+    /// Message related to location creation operations
     @Published var locationCreationMessage: String?
+    
+    /// The most recently created location data
     @Published var createdLocation: LocationData?
     
+    /// Loading state specifically for location fetching operations
     @Published var isFetchingLocation = false
+    
+    /// Error message specifically for location fetching operations
     @Published var fetchLocationError: String?
     
-    // Cache for storing location data by habitation ID
+    /// Cache for storing location data by habitation ID for performance optimization
     @Published var locationCache: [String: LocationData] = [:]
     
+    // MARK: - Private Properties
+    
+    /// Shared network manager instance for API communication
     private let networkManager = NetworkManager.shared
     
+    // MARK: - Public Methods
+    
+    /**
+     * Fetches location data for a specific habitation with intelligent caching.
+     * Checks cache first for performance, then makes API call if needed.
+     * 
+     * @param habitationId The unique identifier of the habitation
+     * 
+     * @throws LocationError.invalidHabitationId if habitationId is empty
+     * @throws NetworkError.unauthorized if authentication token is missing
+     */
     func fetchLocationByHabitationId(habitationId: String) {
-        guard !habitationId.isEmpty else {
+        guard validateHabitationId(habitationId) else {
             showError("Habitation ID is required")
             return
         }
         
-        // Check cache first
+        // Check cache first for performance optimization
         if let cachedLocation = locationCache[habitationId] {
             print("📍 Using cached location for habitation: \(habitationId)")
             selectedLocation = cachedLocation
             return
         }
         
-        guard let token = UserDefaults.standard.string(forKey: "auth_token") else {
+        guard let token = validateAuthenticationToken() else {
             showError("Authentication token not found. Please login again.")
             return
         }
         
-        print("🔍 DEBUG - Making GET request to: https://bodima-backend-api.vercel.app/locations/habitation/\(habitationId)")
+        prepareLocationFetchRequest()
         
-        isFetchingLocation = true
-        clearError()
+        let headers = buildAuthenticationHeaders(token: token)
         
-        let headers = [
-            "Authorization": "Bearer \(token)",
-            "Content-Type": "application/json"
-        ]
-        
-        print("🔍 DEBUG - Method: GET")
-        print("🔍 DEBUG - Headers: \(headers)")
-        
-        networkManager.requestWithHeaders(
-            endpoint: .getLocationByHabitationId(habitationId: habitationId),
-            headers: headers,
-            responseType: GetLocationResponse.self
-        ) { [weak self] result in
-            DispatchQueue.main.async {
-                self?.isFetchingLocation = false
-                
-                switch result {
-                case .success(let response):
-                    print("🔍 DEBUG - Response Status Code: 200")
-                    print("🔍 DEBUG - Response Success: \(response.success)")
-                    
-                    if response.success, let locationData = response.data {
-                        print("✅ Location fetched successfully for habitation: \(habitationId)")
-                        
-                        // Cache the location using the habitation ID
-                        self?.locationCache[habitationId] = locationData
-                        self?.selectedLocation = locationData
-                        
-                        // Add to locations array if not already present
-                        if let locations = self?.locations, !locations.contains(where: { $0.id == locationData.id }) {
-                            self?.locations.append(locationData)
-                        }
-                        
-                        self?.printLocationDataForDebug(location: locationData)
-                        
-                    } else {
-                        print("❌ Location not found for habitation: \(habitationId)")
-                        self?.showError(response.message ?? "Location not found for this habitation")
-                    }
-                    
-                case .failure(let error):
-                    print("🔍 DEBUG - Network Error: \(error)")
-                    self?.handleNetworkError(error)
-                }
-            }
-        }
+        processLocationFetchRequest(
+            habitationId: habitationId,
+            headers: headers
+        )
     }
     
+    /**
+     * Creates a new location record for a habitation with comprehensive validation.
+     * Validates all input parameters, authenticates the request, and handles the response.
+     * 
+     * @param habitationId The unique identifier of the habitation
+     * @param addressNo The address number or building number
+     * @param addressLine01 The primary address line
+     * @param addressLine02 The secondary address line
+     * @param city The city name
+     * @param district The district or region name
+     * @param latitude The latitude coordinate
+     * @param longitude The longitude coordinate
+     * @param nearestHabitationLatitude The latitude of the nearest habitation
+     * @param nearestHabitationLongitude The longitude of the nearest habitation
+     * 
+     * @throws LocationError.missingAddress if required address fields are empty
+     * @throws LocationError.invalidCoordinates if coordinates are out of valid range
+     * @throws NetworkError.unauthorized if authentication token is missing
+     */
     func createLocation(
         habitationId: String,
         addressNo: String,
@@ -327,7 +131,6 @@ class HabitationLocationViewModel: ObservableObject {
     ) {
         print("🔍 DEBUG - Creating location for habitation: \(habitationId)")
         
-        // Validation
         let validation = validateLocationData(
             addressNo: addressNo,
             addressLine01: addressLine01,
@@ -337,21 +140,20 @@ class HabitationLocationViewModel: ObservableObject {
             longitude: longitude
         )
         
-        if !validation.isValid {
+        guard validation.isValid else {
             showLocationCreationError(validation.errorMessage ?? "Invalid location data")
             return
         }
         
-        guard let token = UserDefaults.standard.string(forKey: "auth_token") else {
+        guard let token = validateAuthenticationToken() else {
             showLocationCreationError("Authentication token not found. Please login again.")
             return
         }
         
-        isCreatingLocation = true
-        clearLocationCreationError()
+        prepareLocationCreationRequest()
         
-        let createLocationRequest = CreateLocationRequest(
-            habitation: habitationId,
+        let createLocationRequest = buildLocationCreationRequest(
+            habitationId: habitationId,
             addressNo: addressNo,
             addressLine01: addressLine01,
             addressLine02: addressLine02,
@@ -363,23 +165,165 @@ class HabitationLocationViewModel: ObservableObject {
             nearestHabitationLongitude: nearestHabitationLongitude
         )
         
-        print("🔍 DEBUG - Location data:")
-        print("  - Address No: \(addressNo)")
-        print("  - Address Line 1: \(addressLine01)")
-        print("  - Address Line 2: \(addressLine02)")
-        print("  - City: \(city)")
-        print("  - District: \(district)")
-        print("  - Latitude: \(latitude)")
-        print("  - Longitude: \(longitude)")
+        let headers = buildAuthenticationHeaders(token: token)
         
-        let headers = [
-            "Content-Type": "application/json",
-            "Authorization": "Bearer \(token)"
+        processLocationCreationRequest(
+            request: createLocationRequest,
+            headers: headers,
+            habitationId: habitationId
+        )
+    }
+    
+    // MARK: - Public Utility Methods
+    
+    /**
+     * Retrieves location data for a specific habitation.
+     * Checks cache first, then searches the locations array.
+     * 
+     * @param habitationId The unique identifier of the habitation
+     * @return LocationData if found, nil otherwise
+     */
+    func getLocationForHabitation(habitationId: String) -> LocationData? {
+        // Check cache first for performance
+        if let cachedLocation = locationCache[habitationId] {
+            return cachedLocation
+        }
+        
+        // Check locations array
+        return locations.first { $0.habitationId == habitationId }
+    }
+    
+    // MARK: - Private Helper Methods
+    
+    /**
+     * Validates habitation ID for operations.
+     * 
+     * @param habitationId The habitation ID to validate
+     * @return True if valid, false otherwise
+     */
+    private func validateHabitationId(_ habitationId: String) -> Bool {
+        return !habitationId.isEmpty
+    }
+    
+    /**
+     * Validates and retrieves authentication token from UserDefaults.
+     * 
+     * @return Authentication token if valid, nil otherwise
+     */
+    private func validateAuthenticationToken() -> String? {
+        return UserDefaults.standard.string(forKey: "auth_token")
+    }
+    
+    /**
+     * Prepares the UI state for location fetch request.
+     */
+    private func prepareLocationFetchRequest() {
+        isFetchingLocation = true
+        clearError()
+    }
+    
+    /**
+     * Prepares the UI state for location creation request.
+     */
+    private func prepareLocationCreationRequest() {
+        isCreatingLocation = true
+        clearLocationCreationError()
+    }
+    
+    /**
+     * Builds authentication headers for API requests.
+     * 
+     * @param token The authentication token
+     * @return Dictionary of HTTP headers
+     */
+    private func buildAuthenticationHeaders(token: String) -> [String: String] {
+        return [
+            "Authorization": "Bearer \(token)",
+            "Content-Type": "application/json"
         ]
+    }
+    
+    /**
+     * Builds the request object for location creation.
+     * 
+     * @param habitationId The habitation ID
+     * @param addressNo The address number
+     * @param addressLine01 The primary address line
+     * @param addressLine02 The secondary address line
+     * @param city The city name
+     * @param district The district name
+     * @param latitude The latitude coordinate
+     * @param longitude The longitude coordinate
+     * @param nearestHabitationLatitude The nearest habitation latitude
+     * @param nearestHabitationLongitude The nearest habitation longitude
+     * @return Configured CreateLocationRequest object
+     */
+    private func buildLocationCreationRequest(
+        habitationId: String,
+        addressNo: String,
+        addressLine01: String,
+        addressLine02: String,
+        city: String,
+        district: String,
+        latitude: Double,
+        longitude: Double,
+        nearestHabitationLatitude: Double,
+        nearestHabitationLongitude: Double
+    ) -> CreateLocationRequest {
+        return CreateLocationRequest(
+            habitation: habitationId,
+            addressNo: addressNo,
+            addressLine01: addressLine01,
+            addressLine02: addressLine02,
+            city: city,
+            district: district,
+            latitude: latitude,
+            longitude: longitude,
+            nearestHabitationLatitude: nearestHabitationLatitude,
+            nearestHabitationLongitude: nearestHabitationLongitude
+        )
+    }
+    
+    /**
+     * Processes the location fetch network request.
+     * 
+     * @param habitationId The habitation ID
+     * @param headers The HTTP headers
+     */
+    private func processLocationFetchRequest(
+        habitationId: String,
+        headers: [String: String]
+    ) {
+        print("🔍 DEBUG - Making GET request to: https://bodima-backend-api.vercel.app/locations/habitation/\(habitationId)")
+        print("🔍 DEBUG - Method: GET")
+        print("🔍 DEBUG - Headers: \(headers)")
         
-        // Print request details
+        networkManager.requestWithHeaders(
+            endpoint: .getLocationByHabitationId(habitationId: habitationId),
+            headers: headers,
+            responseType: GetLocationResponse.self
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.handleLocationFetchResponse(result, habitationId: habitationId)
+            }
+        }
+    }
+    
+    /**
+     * Processes the location creation network request.
+     * 
+     * @param request The location creation request
+     * @param headers The HTTP headers
+     * @param habitationId The habitation ID for response handling
+     */
+    private func processLocationCreationRequest(
+        request: CreateLocationRequest,
+        headers: [String: String],
+        habitationId: String
+    ) {
+        // Print request details for debugging
         do {
-            let requestData = try JSONEncoder().encode(createLocationRequest)
+            let requestData = try JSONEncoder().encode(request)
             if let requestString = String(data: requestData, encoding: .utf8) {
                 print("🔍 DEBUG - Request Body: \(requestString)")
             }
@@ -393,67 +337,150 @@ class HabitationLocationViewModel: ObservableObject {
         
         networkManager.requestWithHeaders(
             endpoint: .createLocation,
-            body: createLocationRequest,
+            body: request,
             headers: headers,
             responseType: CreateLocationResponse.self
         ) { [weak self] result in
             DispatchQueue.main.async {
-                self?.isCreatingLocation = false
-                
-                switch result {
-                case .success(let response):
-                    print("🔍 DEBUG - Response Status Code: 201")
-                    print("🔍 DEBUG - Response Success: \(response.success)")
-                    print("🔍 DEBUG - Response Message: \(response.message)")
-                    
-                    if response.success {
-                        print("✅ Location created successfully")
-                        self?.locationCreationSuccess = true
-                        self?.locationCreationMessage = response.message
-                        
-                        if let newLocation = response.data {
-                            print("🔍 DEBUG - Created Location Data: \(newLocation)")
-                            self?.createdLocation = newLocation
-                            self?.locations.append(newLocation)
-                            // Cache the new location
-                            self?.locationCache[habitationId] = newLocation
-                            self?.selectedLocation = newLocation
-                            
-                            self?.printLocationDataForDebug(location: newLocation)
-                        } else {
-                            print("⚠️ Location created but no data returned")
-                        }
-                    } else {
-                        print("❌ Location creation failed: \(response.message)")
-                        self?.showLocationCreationError(response.message)
-                    }
-                    
-                case .failure(let error):
-                    print("🔍 DEBUG - Location Creation Error: \(error)")
-                    self?.handleLocationCreationError(error)
-                }
+                self?.handleLocationCreationResponse(result, habitationId: habitationId)
             }
         }
     }
     
-    // MARK: - Helper Methods
+    /**
+     * Handles the response from location fetch API call.
+     * 
+     * @param result The network result
+     * @param habitationId The habitation ID for caching
+     */
+    private func handleLocationFetchResponse(
+        _ result: Result<GetLocationResponse, Error>,
+        habitationId: String
+    ) {
+        isFetchingLocation = false
+        
+        switch result {
+        case .success(let response):
+            print("🔍 DEBUG - Response Status Code: 200")
+            print("🔍 DEBUG - Response Success: \(response.success)")
+            
+            if response.success, let locationData = response.data {
+                handleSuccessfulLocationFetch(locationData, habitationId: habitationId)
+            } else {
+                print("❌ Location not found for habitation: \(habitationId)")
+                showError(response.message ?? "Location not found for this habitation")
+            }
+            
+        case .failure(let error):
+            print("🔍 DEBUG - Network Error: \(error)")
+            handleNetworkError(error)
+        }
+    }
     
+    /**
+     * Handles the response from location creation API call.
+     * 
+     * @param result The network result
+     * @param habitationId The habitation ID for caching
+     */
+    private func handleLocationCreationResponse(
+        _ result: Result<CreateLocationResponse, Error>,
+        habitationId: String
+    ) {
+        isCreatingLocation = false
+        
+        switch result {
+        case .success(let response):
+            print("🔍 DEBUG - Response Status Code: 201")
+            print("🔍 DEBUG - Response Success: \(response.success)")
+            print("🔍 DEBUG - Response Message: \(response.message)")
+            
+            if response.success {
+                handleSuccessfulLocationCreation(response, habitationId: habitationId)
+            } else {
+                print("❌ Location creation failed: \(response.message)")
+                showLocationCreationError(response.message)
+            }
+            
+        case .failure(let error):
+            print("🔍 DEBUG - Location Creation Error: \(error)")
+            handleLocationCreationError(error)
+        }
+    }
+    
+    /**
+     * Handles successful location fetch by updating local state.
+     * 
+     * @param locationData The fetched location data
+     * @param habitationId The habitation ID for caching
+     */
+    private func handleSuccessfulLocationFetch(
+        _ locationData: LocationData,
+        habitationId: String
+    ) {
+        print("✅ Location fetched successfully for habitation: \(habitationId)")
+        
+        // Cache the location using the habitation ID
+        locationCache[habitationId] = locationData
+        selectedLocation = locationData
+        
+        // Add to locations array if not already present
+        if !locations.contains(where: { $0.id == locationData.id }) {
+            locations.append(locationData)
+        }
+        
+        printLocationDataForDebug(location: locationData)
+    }
+    
+    /**
+     * Handles successful location creation by updating local state.
+     * 
+     * @param response The successful API response
+     * @param habitationId The habitation ID for caching
+     */
+    private func handleSuccessfulLocationCreation(
+        _ response: CreateLocationResponse,
+        habitationId: String
+    ) {
+        print("✅ Location created successfully")
+        locationCreationSuccess = true
+        locationCreationMessage = response.message
+        
+        if let newLocation = response.data {
+            print("🔍 DEBUG - Created Location Data: \(newLocation)")
+            createdLocation = newLocation
+            locations.append(newLocation)
+            // Cache the new location
+            locationCache[habitationId] = newLocation
+            selectedLocation = newLocation
+            
+            printLocationDataForDebug(location: newLocation)
+        } else {
+            print("⚠️ Location created but no data returned")
+        }
+    }
+    
+    /**
+     * Validates if coordinates are within valid geographical ranges.
+     * 
+     * @param latitude The latitude coordinate
+     * @param longitude The longitude coordinate
+     * @return True if coordinates are valid, false otherwise
+     */
     private func isValidCoordinate(latitude: Double, longitude: Double) -> Bool {
         return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
     }
     
-    func getLocationForHabitation(habitationId: String) -> LocationData? {
-        // Check cache first
-        if let cachedLocation = locationCache[habitationId] {
-            return cachedLocation
-        }
-        
-        // Check locations array
-        return locations.first { $0.habitationId == habitationId }
-    }
-    
+    /**
+     * Calculates the distance between a location and a coordinate using the Haversine formula.
+     * Returns the distance in meters.
+     * 
+     * @param location The source location data
+     * @param coordinate The target coordinate (latitude, longitude)
+     * @return Distance in meters
+     */
     func calculateDistance(from location: LocationData, to coordinate: (latitude: Double, longitude: Double)) -> Double {
-        let earthRadius = 6371000.0
+        let earthRadius = 6371000.0 // Earth radius in meters
         
         let lat1Rad = location.latitude * .pi / 180
         let lon1Rad = location.longitude * .pi / 180
@@ -469,10 +496,23 @@ class HabitationLocationViewModel: ObservableObject {
         return earthRadius * c
     }
     
+    /**
+     * Formats a coordinate value to 6 decimal places for display.
+     * 
+     * @param coordinate The coordinate value to format
+     * @return Formatted coordinate string
+     */
     func formatCoordinate(_ coordinate: Double) -> String {
         return String(format: "%.6f", coordinate)
     }
     
+    /**
+     * Constructs a full address string from location data.
+     * Filters out empty components and joins with commas.
+     * 
+     * @param location The location data to format
+     * @return Complete formatted address string
+     */
     func getFullAddress(from location: LocationData) -> String {
         let addressComponents = [
             location.addressNo,
@@ -485,6 +525,12 @@ class HabitationLocationViewModel: ObservableObject {
         return addressComponents.joined(separator: ", ")
     }
     
+    /**
+     * Prints comprehensive location data for debugging purposes.
+     * Outputs all location fields in a formatted, readable manner.
+     * 
+     * @param location The location data to debug
+     */
     private func printLocationDataForDebug(location: LocationData) {
         print("🏠 ===== LOCATION DATA DEBUG =====")
         print("📍 Location ID: \(location.id)")
@@ -511,8 +557,13 @@ class HabitationLocationViewModel: ObservableObject {
         print("🏠 ================================")
     }
     
-    // MARK: - Error Handling
+    // MARK: - Error Handling Methods
     
+    /**
+     * Handles network errors with appropriate user messaging and token cleanup.
+     * 
+     * @param error The network error to handle
+     */
     private func handleNetworkError(_ error: Error) {
         if let networkError = error as? NetworkError {
             switch networkError {
@@ -534,6 +585,11 @@ class HabitationLocationViewModel: ObservableObject {
         }
     }
     
+    /**
+     * Handles location creation specific errors with appropriate messaging.
+     * 
+     * @param error The error that occurred during location creation
+     */
     private func handleLocationCreationError(_ error: Error) {
         if let networkError = error as? NetworkError {
             switch networkError {
@@ -555,6 +611,11 @@ class HabitationLocationViewModel: ObservableObject {
         }
     }
     
+    /**
+     * Displays a general error message and updates error state.
+     * 
+     * @param message The error message to display
+     */
     func showError(_ message: String) {
         errorMessage = message
         hasError = true
@@ -562,25 +623,51 @@ class HabitationLocationViewModel: ObservableObject {
         print("❌ ERROR - \(message)")
     }
     
+    /**
+     * Clears the general error state and message.
+     */
     private func clearError() {
         errorMessage = nil
         hasError = false
         fetchLocationError = nil
     }
     
+    /**
+     * Displays a location creation specific error message.
+     * 
+     * @param message The error message to display
+     */
     func showLocationCreationError(_ message: String) {
         locationCreationMessage = message
         locationCreationSuccess = false
         print("❌ LOCATION CREATION ERROR - \(message)")
     }
     
+    /**
+     * Clears the location creation error state and message.
+     */
     private func clearLocationCreationError() {
         locationCreationMessage = nil
         locationCreationSuccess = false
     }
     
-    // MARK: - Public Methods
+    // MARK: - Integration Methods
     
+    /**
+     * Creates a location for a habitation using HabitationData object.
+     * Convenience method for integration with HabitationViewModel.
+     * 
+     * @param habitation The habitation data object
+     * @param addressNo The address number
+     * @param addressLine01 The primary address line
+     * @param addressLine02 The secondary address line
+     * @param city The city name
+     * @param district The district name
+     * @param latitude The latitude coordinate
+     * @param longitude The longitude coordinate
+     * @param nearestHabitationLatitude The nearest habitation latitude
+     * @param nearestHabitationLongitude The nearest habitation longitude
+     */
     func createLocationForHabitation(
         habitation: HabitationData,
         addressNo: String,
@@ -607,6 +694,12 @@ class HabitationLocationViewModel: ObservableObject {
         )
     }
     
+    /**
+     * Fetches location for the currently selected habitation in HabitationViewModel.
+     * Integration method for seamless cooperation between ViewModels.
+     * 
+     * @param habitationViewModel The habitation view model instance
+     */
     func fetchLocationForSelectedHabitation(habitationViewModel: HabitationViewModel) {
         guard let selectedHabitation = habitationViewModel.selectedHabitation else {
             showError("No habitation selected")
@@ -616,6 +709,20 @@ class HabitationLocationViewModel: ObservableObject {
         fetchLocationByHabitationId(habitationId: selectedHabitation.id)
     }
     
+    // MARK: - Validation Methods
+    
+    /**
+     * Validates location data for completeness and correctness.
+     * Checks required fields and coordinate validity.
+     * 
+     * @param addressNo The address number to validate
+     * @param addressLine01 The primary address line to validate
+     * @param city The city name to validate
+     * @param district The district name to validate
+     * @param latitude The latitude coordinate to validate
+     * @param longitude The longitude coordinate to validate
+     * @return Tuple containing validation result and error message if invalid
+     */
     func validateLocationData(
         addressNo: String,
         addressLine01: String,
@@ -647,6 +754,14 @@ class HabitationLocationViewModel: ObservableObject {
         return (true, nil)
     }
     
+    // MARK: - Utility Methods
+    
+    /**
+     * Formats an ISO8601 date string for user-friendly display.
+     * 
+     * @param dateString The ISO8601 formatted date string
+     * @return Formatted date string for display, or original string if parsing fails
+     */
     func formatDate(_ dateString: String) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -661,6 +776,12 @@ class HabitationLocationViewModel: ObservableObject {
         return dateString
     }
     
+    // MARK: - Data Management Methods
+    
+    /**
+     * Clears all location data and resets error states.
+     * Useful for logout or data refresh scenarios.
+     */
     func clearLocations() {
         locations.removeAll()
         locationCache.removeAll()
@@ -670,6 +791,10 @@ class HabitationLocationViewModel: ObservableObject {
         print("🔍 DEBUG - Cleared all locations and cache")
     }
     
+    /**
+     * Resets all location creation related states to their initial values.
+     * Useful for preparing for new location creation operations.
+     */
     func resetLocationCreationState() {
         isCreatingLocation = false
         locationCreationSuccess = false
@@ -678,11 +803,21 @@ class HabitationLocationViewModel: ObservableObject {
         print("🔍 DEBUG - Reset location creation state")
     }
     
+    /**
+     * Resets the selected location to nil.
+     * Used when switching contexts or clearing selection.
+     */
     func resetSelectedLocation() {
         selectedLocation = nil
         print("🔍 DEBUG - Reset selected location")
     }
     
+    /**
+     * Refreshes location data for a specific habitation by clearing cache and refetching.
+     * Forces a fresh API call even if data is cached.
+     * 
+     * @param habitationId The unique identifier of the habitation
+     */
     func refreshLocationForHabitation(habitationId: String) {
         // Remove from cache to force refresh
         locationCache.removeValue(forKey: habitationId)
@@ -691,18 +826,38 @@ class HabitationLocationViewModel: ObservableObject {
     
     // MARK: - Computed Properties
     
+    /**
+     * Total count of all locations loaded in the application.
+     * 
+     * @return The total number of locations
+     */
     var locationCount: Int {
         return locations.count
     }
     
+    /**
+     * Boolean indicating if a location is currently selected.
+     * 
+     * @return True if a location is selected, false otherwise
+     */
     var hasSelectedLocation: Bool {
         return selectedLocation != nil
     }
     
+    /**
+     * Boolean indicating if any location operation is currently in progress.
+     * 
+     * @return True if any operation is active, false otherwise
+     */
     var isLocationOperationInProgress: Bool {
         return isCreatingLocation || isFetchingLocation || isLoading
     }
     
+    /**
+     * Human-readable summary of available locations.
+     * 
+     * @return Descriptive string about location availability
+     */
     var locationSummary: String {
         if locations.isEmpty {
             return "No locations available"

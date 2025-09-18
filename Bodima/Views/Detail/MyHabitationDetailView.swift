@@ -23,7 +23,7 @@ struct MyHabitationDetailView: View {
     private var fullAddress: String {
         guard let location = locationData else { 
             if let user = habitation.user {
-                return "\(user.city), \(user.district)" 
+                return "\(user.phoneNumber)" 
             } else {
                 return "Unknown location"
             }
@@ -264,14 +264,14 @@ struct MyHabitationDetailView: View {
             
             if let feature = featureData {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    AmenityView(icon: "bed.double", text: "\(feature.smallBedCount) Small Beds\n\(feature.largeBedCount) Large Beds")
-                    AmenityView(icon: "chair", text: "\(feature.chairCount) Chairs\n\(feature.tableCount) Tables")
-                    AmenityView(icon: "window.vertical", text: "\(feature.windowsCount) Windows")
-                    AmenityView(icon: "square.and.arrow.up.on.square", text: "\(feature.sqft) sqft")
-                    AmenityView(icon: "person.2", text: "\(feature.familyType)")
-                    AmenityView(icon: "bolt", text: feature.isElectricityAvailable ? "Electricity Available" : "No Electricity")
-                    AmenityView(icon: "drop", text: feature.isWaterAvailable ? "Water Available" : "No Water")
-                    AmenityView(icon: "washer", text: feature.isWachineMachineAvailable ? "Washing Machine" : "No Washing Machine")
+                    MyAmenityView(icon: "bed.double", text: "\(feature.smallBedCount) Small Beds\n\(feature.largeBedCount) Large Beds")
+                    MyAmenityView(icon: "chair", text: "\(feature.chairCount) Chairs\n\(feature.tableCount) Tables")
+                    MyAmenityView(icon: "window.vertical", text: "\(feature.windowsCount) Windows")
+                    MyAmenityView(icon: "square.and.arrow.up.on.square", text: "\(feature.sqft) sqft")
+                    MyAmenityView(icon: "person.2", text: "\(feature.familyType)")
+                    MyAmenityView(icon: "bolt", text: feature.isElectricityAvailable ? "Electricity Available" : "No Electricity")
+                    MyAmenityView(icon: "drop", text: feature.isWaterAvailable ? "Water Available" : "No Water")
+                    MyAmenityView(icon: "washer", text: feature.isWachineMachineAvailable ? "Washing Machine" : "No Washing Machine")
                 }
             }
         }

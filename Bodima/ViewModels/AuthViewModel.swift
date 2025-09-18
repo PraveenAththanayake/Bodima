@@ -1,25 +1,60 @@
 import Foundation
 import SwiftUI
 
+/**
+ * AuthViewModel - Core Authentication State Manager
+ *
+ * Manages user authentication state, token validation, and profile completion status.
+ * Implements singleton pattern for global authentication state management across the app.
+ *
+ * Key Responsibilities:
+ * - User sign-in/sign-up operations
+ * - JWT token management and validation
+ * - Biometric authentication integration
+ * - Profile completion status tracking
+ * - Automatic token refresh and session management
+ */
 @MainActor
 class AuthViewModel: ObservableObject {
     
+    // MARK: - Singleton Instance
     static let shared = AuthViewModel()
     
+    // MARK: - Published Properties
+    /// Current authentication state of the user
     @Published var authState: AuthState = .idle
+    
+    /// Loading state for UI feedback during authentication operations
     @Published var isLoading = false
+    
+    /// Alert message for user feedback (errors, success messages)
     @Published var alertMessage: AlertMessage?
+    
+    /// Currently authenticated user data
     @Published var currentUser: User?
+    
+    /// JWT token for API authentication
     @Published var jwtToken: String?
+    
+    /// Flag indicating if user has completed profile setup
     @Published var isUserProfileAvailable = false
+    
+    /// Flag indicating if profile check has been completed
     @Published var profileCheckCompleted = false
     
+    // MARK: - Dependencies
     private let networkManager: NetworkManager
     private let storageManager: UserDefaultsManager
     private let validator: AuthValidator
     private let biometricManager: BiometricManager
     private let keychainManager: KeychainManager
+    private let profileCache = ProfileCacheRepository.shared
     
+    // MARK: - Initialization
+    /**
+     * Private initializer for singleton pattern.
+     * Initializes all dependencies and starts authentication status check.
+     */
     private init(
         networkManager: NetworkManager = NetworkManager.shared,
         storageManager: UserDefaultsManager = UserDefaultsManager.shared,
@@ -34,23 +69,28 @@ class AuthViewModel: ObservableObject {
         self.keychainManager = keychainManager
         
         checkAuthStatus()
-        
-        // Start periodic token validation
         startTokenValidationTimer()
     }
     
-    // Timer for periodic token validation
+    // MARK: - Token Validation Timer
+    /// Timer for periodic JWT token validation to prevent expired token usage
     private var tokenValidationTimer: Timer?
     
+    /**
+     * Starts a periodic timer to validate JWT token every 60 seconds.
+     * Prevents users from making API calls with expired tokens.
+     */
     private func startTokenValidationTimer() {
-        // Check token validity every 60 seconds
         tokenValidationTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
             self?.validateTokenPeriodically()
         }
     }
     
+    /**
+     * Validates token periodically and signs out user if token is expired.
+     * Only performs validation when user is in authenticated state.
+     */
     private func validateTokenPeriodically() {
-        // Only check if we're in authenticated state
         if case .authenticated = authState {
             if isTokenExpired() {
                 forceSignOut()
@@ -58,20 +98,29 @@ class AuthViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Computed Properties
+    /// Returns true if user is currently authenticated
     var isAuthenticated: Bool {
         if case .authenticated = authState { return true }
         return false
     }
     
+    /// Returns true if user is not authenticated
     var isUnauthenticated: Bool {
         if case .unauthenticated = authState { return true }
         return false
     }
     
+    /// Returns true if there's an active alert message
     var hasAlert: Bool {
         alertMessage != nil
     }
     
+    /**
+     * Determines if authenticated user needs to complete their profile.
+     * Checks multiple conditions including profile completion status and name availability.
+     * Automatically updates user profile completion status if valid name data is found.
+     */
     var needsProfileCompletion: Bool {
         guard case .authenticated = authState else { return false }
         guard let user = currentUser else { return false }
@@ -85,6 +134,7 @@ class AuthViewModel: ObservableObject {
         let hasFullNameWithSpace = user.fullName != nil && !user.fullName!.isEmpty &&
                                    user.fullName!.contains(" ")
         
+        // Auto-complete profile if valid name data exists
         if hasFirstAndLastName || hasFullNameWithSpace {
             var updatedUser = user
             updatedUser.hasCompletedProfile = true
@@ -95,31 +145,46 @@ class AuthViewModel: ObservableObject {
         return true
     }
     
+    /// Returns true if JWT token exists and is not empty
     var hasValidToken: Bool {
         return jwtToken != nil && !jwtToken!.isEmpty
     }
     
+    // MARK: - Authentication Status Management
+    /**
+     * Checks current authentication status on app launch.
+     * Validates stored tokens and restores user session if valid.
+     * Automatically signs out user if token is expired.
+     */
     private func checkAuthStatus() {
         profileCheckCompleted = false
         
         if let user = storageManager.getUser(),
            let token = storageManager.getToken() {
-            // Check if token is valid before setting authenticated state
+            
+            // Validate token before restoring session
             if isTokenExpired(token: token) {
-                // Token is expired, force sign out
                 forceSignOut()
                 return
             }
             
+            // Restore authenticated session
             currentUser = user
             jwtToken = token
-            
-            let storedProfileAvailability = storageManager.getUserProfileAvailability()
-            isUserProfileAvailable = storedProfileAvailability
-            
+            isUserProfileAvailable = storageManager.getUserProfileAvailability()
             authState = .authenticated(user)
+            // Seed profile cache from stored user if profile was completed previously
+            if let userId = user.id, (user.hasCompletedProfile == true || isUserProfileAvailable) {
+                if profileCache.fetch(userId: userId) == nil {
+                    let synthesized = synthesizeProfileData(from: user)
+                    profileCache.save(profile: synthesized)
+                }
+            }
+            
+            // Verify profile completion status with server
             checkProfileCompletionFromServer()
         } else {
+            // No stored credentials, set unauthenticated state
             authState = .unauthenticated
             jwtToken = nil
             isUserProfileAvailable = false
@@ -127,6 +192,11 @@ class AuthViewModel: ObservableObject {
         }
     }
     
+    /**
+     * Fetches user profile completion status from server.
+     * Called after successful authentication to verify profile data.
+     * Updates local profile availability flags based on server response.
+     */
     func checkProfileCompletionFromServer() {
         guard let userId = currentUser?.id,
               let token = jwtToken else {
@@ -149,72 +219,121 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    /**
+     * Handles the response from profile completion check API call.
+     * Updates user profile data and completion status based on server response.
+     * Handles special case for "resource exceeds maximum size" error as profile complete.
+     */
     private func handleProfileCheckResponse(_ result: Result<ProfileResponse, Error>) {
         profileCheckCompleted = true
         
         switch result {
         case .success(let response):
             if response.success, let profileData = response.data {
+                // Profile exists and is complete
                 isUserProfileAvailable = true
                 storageManager.saveUserProfileAvailability(true)
                 
-                if var user = currentUser {
-                    // Update user with all profile data
-                    user.hasCompletedProfile = true
-                    user.firstName = profileData.firstName
-                    user.lastName = profileData.lastName
-                    user.bio = profileData.bio
-                    user.phoneNumber = profileData.phoneNumber
-                    user.addressNo = profileData.addressNo
-                    user.addressLine1 = profileData.addressLine1
-                    user.addressLine2 = profileData.addressLine2
-                    user.city = profileData.city
-                    user.district = profileData.district
-                    user.profileImageURL = profileData.profileImageURL
-                    user.createdAt = profileData.createdAt
-                    user.updatedAt = profileData.updatedAt
-                    
-                    // Update email and username from auth data if available
-                    user.email = profileData.auth.email
-                    user.username = profileData.auth.username
-                    user.id = profileData.id
-                    
-                    updateCurrentUser(user)
-                }
+                updateUserWithProfileData(profileData)
+                // Cache profile for offline use
+                profileCache.save(profile: profileData)
             } else {
-                isUserProfileAvailable = false
-                storageManager.saveUserProfileAvailability(false)
-                if var user = currentUser {
-                    user.hasCompletedProfile = false
-                    updateCurrentUser(user)
-                }
+                // Profile incomplete or doesn't exist
+                markProfileIncomplete()
             }
-        case .failure(let error):
-            let errorString = error.localizedDescription
             
-            if errorString.contains("resource exceeds maximum size") {
+        case .failure(let error):
+            handleProfileCheckError(error)
+        }
+    }
+    
+    /**
+     * Updates current user with complete profile data from server response.
+     */
+    private func updateUserWithProfileData(_ profileData: ProfileData) {
+        guard var user = currentUser else { return }
+        
+        // Update profile completion status
+        user.hasCompletedProfile = true
+        
+        // Update profile fields
+        user.firstName = profileData.firstName
+        user.lastName = profileData.lastName
+        user.bio = profileData.bio
+        user.phoneNumber = profileData.phoneNumber
+        user.addressNo = profileData.addressNo
+        user.addressLine1 = profileData.addressLine1
+        user.addressLine2 = profileData.addressLine2
+        user.city = profileData.city
+        user.district = profileData.district
+        user.profileImageURL = profileData.profileImageURL
+        user.createdAt = profileData.createdAt
+        user.updatedAt = profileData.updatedAt
+        
+        // Update authentication data
+        user.email = profileData.auth.email
+        user.username = profileData.auth.username
+        user.id = profileData.id
+        
+        updateCurrentUser(user)
+    }
+    
+    /**
+     * Marks user profile as incomplete and updates storage.
+     */
+    private func markProfileIncomplete() {
+        isUserProfileAvailable = false
+        storageManager.saveUserProfileAvailability(false)
+        
+        if var user = currentUser {
+            user.hasCompletedProfile = false
+            updateCurrentUser(user)
+        }
+    }
+    
+    /**
+     * Handles errors from profile check API call.
+     * Special handling for "resource exceeds maximum size" which indicates complete profile.
+     */
+    private func handleProfileCheckError(_ error: Error) {
+        let errorString = error.localizedDescription
+        
+        if errorString.contains("resource exceeds maximum size") {
+            // Large profile response indicates complete profile
+            isUserProfileAvailable = true
+            storageManager.saveUserProfileAvailability(true)
+            
+            if var user = currentUser {
+                user.hasCompletedProfile = true
+                updateCurrentUser(user)
+            }
+        } else {
+            // Try offline fallback from cache to avoid forcing profile completion when offline
+            if let userId = currentUser?.id, let cached = profileCache.fetch(userId: userId) {
                 isUserProfileAvailable = true
                 storageManager.saveUserProfileAvailability(true)
-                if var user = currentUser {
-                    user.hasCompletedProfile = true
-                    updateCurrentUser(user)
-                }
+                updateUserWithProfileData(cached)
             } else {
-                isUserProfileAvailable = false
-                storageManager.saveUserProfileAvailability(false)
-                if var user = currentUser {
-                    user.hasCompletedProfile = false
-                    updateCurrentUser(user)
-                }
+                // Preserve existing state instead of forcing incomplete when offline
+                // This avoids pushing CreateProfileView unnecessarily
+                profileCheckCompleted = true
             }
         }
     }
 
-    // Add a method to refresh profile data
+    /**
+     * Refreshes user profile data from server.
+     * Can be called manually to update profile completion status.
+     */
     func refreshProfile() {
         checkProfileCompletionFromServer()
     }
     
+    // MARK: - Authentication Operations
+    /**
+     * Performs user sign-in with email and password.
+     * Validates input before making API request and handles remember me functionality.
+     */
     func signIn(email: String, password: String, rememberMe: Bool) {
         guard validator.validateSignInInput(email: email, password: password) else {
             showAlert(.error(validator.lastError))
@@ -233,8 +352,11 @@ class AuthViewModel: ObservableObject {
     }
     
     // MARK: - Biometric Authentication
+    /**
+     * Performs biometric authentication using stored token.
+     * Validates token format and verifies with backend before authentication.
+     */
     func signInWithBiometric(token: String) {
-        // Validate token before proceeding
         guard !token.isEmpty, token.count > 10 else {
             showAlert(.error("Invalid authentication token"))
             return
@@ -242,12 +364,12 @@ class AuthViewModel: ObservableObject {
         
         setLoading(true)
         
-        // Verify the token with the backend
         let headers = ["Authorization": "Bearer \(token)"]
+        let emptyBody = EmptyRequest()
         
         networkManager.requestWithHeaders(
             endpoint: .verifyToken,
-            body: nil as String?,
+            body: emptyBody,
             headers: headers,
             responseType: TokenVerificationResponse.self
         ) { [weak self] result in
@@ -258,40 +380,65 @@ class AuthViewModel: ObservableObject {
         }
     }
     
+    /**
+     * Handles biometric authentication response from server.
+     * Updates authentication state on success or clears biometric data on failure.
+     */
     private func handleBiometricAuthResponse(_ result: Result<TokenVerificationResponse, Error>, token: String) {
         switch result {
         case .success(let response):
             if response.success, let userData = response.userData {
-                // Update stored token and user data
+                // Store authentication data
                 storageManager.saveToken(token)
                 storageManager.saveUser(userData)
                 
+                // Update current session
                 currentUser = userData
                 jwtToken = token
                 authState = .authenticated(userData)
                 
-                if !profileCheckCompleted {
-                    checkProfileCompletionFromServer()
-                }
+                // Handle profile availability
+                handleProfileAvailabilityFromResponse(response)
                 
                 clearAlert()
                 showAlert(.success("Welcome back! Signed in with biometric authentication."))
             } else {
                 let message = response.message.isEmpty ? "Token verification failed" : response.message
                 showAlert(.error(message))
-                // Clear biometric data if token is invalid
-                biometricManager.clearBiometricToken()
-                biometricManager.setBiometricEnabled(false)
+                clearBiometricData()
             }
             
         case .failure(let error):
             handleNetworkError(error)
-            // Clear biometric data if there's an error
-            biometricManager.clearBiometricToken()
-            biometricManager.setBiometricEnabled(false)
+            clearBiometricData()
         }
     }
     
+    /**
+     * Handles profile availability data from authentication response.
+     */
+    private func handleProfileAvailabilityFromResponse(_ response: TokenVerificationResponse) {
+        if let profileAvailable = response.isUserProfileAvailable {
+            isUserProfileAvailable = profileAvailable
+            storageManager.saveUserProfileAvailability(profileAvailable)
+            profileCheckCompleted = true
+        } else if !profileCheckCompleted {
+            checkProfileCompletionFromServer()
+        }
+    }
+    
+    /**
+     * Clears biometric authentication data when authentication fails.
+     */
+    private func clearBiometricData() {
+        biometricManager.clearBiometricToken()
+        biometricManager.setBiometricEnabled(false)
+    }
+    
+    /**
+     * Performs user registration with email, username, and password.
+     * Validates input and initiates auto-login after successful registration.
+     */
     func signUp(email: String, username: String, password: String, agreedToTerms: Bool) {
         guard validator.validateSignUpInput(
             email: email,
@@ -315,24 +462,46 @@ class AuthViewModel: ObservableObject {
         performSignUpRequest(request: request, email: email, password: password)
     }
     
+    /**
+     * Signs out the current user and clears authentication data.
+     * Preserves biometric token if biometric authentication is enabled.
+     */
     func signOut() {
-        // Invalidate token validation timer
+        // Stop token validation
         tokenValidationTimer?.invalidate()
         tokenValidationTimer = nil
         
-        // Clear all authentication data
+        // Clear stored authentication data
         storageManager.clearAuthData()
-        keychainManager.clearAllBiometricData()
         
+        // Conditionally clear biometric data
+        if !biometricManager.isBiometricEnabled {
+            keychainManager.clearAllBiometricData()
+        }
+        
+        // Reset authentication state
+        resetAuthenticationState()
+        
+        showAlert(.info("You have been signed out successfully"))
+    }
+    
+    /**
+     * Resets all authentication-related state variables.
+     */
+    private func resetAuthenticationState() {
         currentUser = nil
         jwtToken = nil
         isUserProfileAvailable = false
         profileCheckCompleted = false
         authState = .unauthenticated
         clearAlert()
-        showAlert(.info("You have been signed out successfully"))
     }
     
+    // MARK: - Private Authentication Helpers
+    /**
+     * Generic method to perform authentication requests (sign-in/sign-up).
+     * Handles network request and response processing.
+     */
     private func performAuthRequest<T: Codable>(endpoint: APIEndpoint, request: T, isSignUp: Bool) {
         networkManager.request(
             endpoint: endpoint,
@@ -436,21 +605,26 @@ class AuthViewModel: ObservableObject {
         }
     }
     
+    /**
+     * Forces user sign-out due to expired or invalid token.
+     * Called automatically when token validation fails.
+     */
     func forceSignOut() {
-        // Invalidate token validation timer
+        // Stop token validation
         tokenValidationTimer?.invalidate()
         tokenValidationTimer = nil
         
-        // Clear all authentication data
+        // Clear stored authentication data
         storageManager.clearAuthData()
-        keychainManager.clearAllBiometricData()
         
-        currentUser = nil
-        jwtToken = nil
-        isUserProfileAvailable = false
-        profileCheckCompleted = false
-        authState = .unauthenticated
-        clearAlert()
+        // Conditionally clear biometric data
+        if !biometricManager.isBiometricEnabled {
+            keychainManager.clearAllBiometricData()
+        }
+        
+        // Reset authentication state
+        resetAuthenticationState()
+        
         showAlert(.error("Session expired. Please sign in again."))
     }
     
@@ -513,6 +687,35 @@ class AuthViewModel: ObservableObject {
         showAlert(.success("Account created successfully! Please sign in."))
         authState = .unauthenticated
     }
+
+    // MARK: - Offline Cache Synthesis
+    private func synthesizeProfileData(from user: User) -> ProfileData {
+        let auth = AuthData(
+            id: user.id ?? "",
+            email: user.email,
+            username: user.username,
+            createdAt: user.createdAt ?? "",
+            updatedAt: user.updatedAt ?? ""
+        )
+        return ProfileData(
+            id: user.id ?? "",
+            auth: auth,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            bio: user.bio,
+            phoneNumber: user.phoneNumber,
+            addressNo: user.addressNo,
+            addressLine1: user.addressLine1,
+            addressLine2: user.addressLine2,
+            city: user.city,
+            district: user.district,
+            profileImageURL: user.profileImageURL ?? user.profileImageUrl,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+            profileImageUrl: user.profileImageURL ?? user.profileImageUrl,
+            accessibilitySettings: nil
+        )
+    }
     
     func showAlert(_ alert: AlertMessage) {
         alertMessage = alert
@@ -541,6 +744,11 @@ class AuthViewModel: ObservableObject {
         storageManager.saveUser(user)
         currentUser = user
         authState = .authenticated(user)
+        // If profile is complete, ensure cache is updated for offline use
+        if let userId = user.id, user.hasCompletedProfile == true {
+            let synthesized = synthesizeProfileData(from: user)
+            profileCache.save(profile: synthesized)
+        }
     }
     
     func refreshTokenIfNeeded() {
@@ -568,6 +776,11 @@ class AuthViewModel: ObservableObject {
         
         return true
     }
+}
+
+// MARK: - Empty Request Model
+struct EmptyRequest: Codable {
+    // Empty struct for requests that don't need a body
 }
 
 private extension String {

@@ -1,19 +1,30 @@
 import SwiftUI
 
 struct AccessibilitySettingsView: View {
+    // Settings state management
     @StateObject private var accessibilityViewModel: AccessibilityViewModel = AccessibilityViewModel()
     @StateObject private var authViewModel = AuthViewModel.shared
     @Environment(\.dismiss) private var dismiss
     
+    // Main view body orchestrating modular components
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 24) {
-                    SettingsHeaderView()
-                    AccessibilitySettingsSection(accessibilityViewModel: accessibilityViewModel)
-                    AccountSettingsSection()
-                    AppSettingsSection()
-                    AboutSection()
+                    // Header with app branding and context
+                    SettingsHeaderComponent()
+                    
+                    // Accessibility settings with comprehensive options
+                    SettingsAccessibilityComponent(accessibilityViewModel: accessibilityViewModel)
+                    
+                    // Account management and privacy settings
+                    SettingsAccountComponent()
+                    
+                    // App preferences and customization options
+                    SettingsPreferencesComponent()
+                    
+                    // Support information and legal documents
+                    SettingsSupportComponent()
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 100)
@@ -45,7 +56,7 @@ struct AccessibilitySettingsView: View {
                 Text(accessibilityViewModel.errorMessage ?? "An error occurred")
             }
             .overlay(
-                // Success message overlay
+                // Success message overlay with animation
                 Group {
                     if accessibilityViewModel.showSaveSuccess {
                         VStack {
@@ -73,18 +84,18 @@ struct AccessibilitySettingsView: View {
         }
     }
     
+    // Settings loading and persistence functions
+    // Handles local and server-side settings synchronization
     private func loadAccessibilitySettings() {
         guard let userId = authViewModel.currentUser?.id ?? UserDefaults.standard.string(forKey: "user_id") else {
             return
         }
         
-        // Load local settings first for immediate UI update
         accessibilityViewModel.loadLocalSettings()
-        
-        // Then fetch from server
         accessibilityViewModel.fetchAccessibilitySettings(userId: userId)
     }
     
+    // Settings save functionality with user authentication
     private func saveAccessibilitySettings() {
         guard let userId = authViewModel.currentUser?.id ?? UserDefaults.standard.string(forKey: "user_id") else {
             return
@@ -94,134 +105,8 @@ struct AccessibilitySettingsView: View {
     }
 }
 
-// MARK: - Settings Header
-struct SettingsHeaderView: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "gearshape.fill")
-                .font(.system(size: 40, weight: .medium))
-                .foregroundColor(AppColors.primary)
-            
-            Text("App Settings")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundColor(AppColors.foreground)
-            
-            Text("Customize your experience")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(AppColors.mutedForeground)
-        }
-        .padding(.top, 20)
-    }
-}
-
-// MARK: - Accessibility Settings Section
-struct AccessibilitySettingsSection: View {
-    @ObservedObject var accessibilityViewModel: AccessibilityViewModel
-    @StateObject private var authViewModel = AuthViewModel.shared
-    
-    var body: some View {
-        AccessibilityCard {
-            VStack(spacing: 16) {
-                HStack(spacing: 8) {
-                    AccessibilityImage(systemName: "accessibility", size: 18, accessibilityLabel: "Accessibility")
-                    AccessibilityText("Accessibility", size: 18, weight: .bold)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                
-                AccessibilityToggle(
-                    isOn: $accessibilityViewModel.accessibilitySettings.largeText,
-                    title: "Large Text",
-                    description: "Increase text size throughout the app",
-                    icon: "textformat.size"
-                )
-                
-                AccessibilityDivider()
-                
-                AccessibilityToggle(
-                    isOn: $accessibilityViewModel.accessibilitySettings.highContrast,
-                    title: "High Contrast",
-                    description: "Enhance visual contrast for better readability",
-                    icon: "circle.lefthalf.filled"
-                )
-                
-                AccessibilityDivider()
-                
-                AccessibilityToggle(
-                    isOn: $accessibilityViewModel.accessibilitySettings.reduceMotion,
-                    title: "Reduce Motion",
-                    description: "Minimize animations and transitions",
-                    icon: "tortoise"
-                )
-                
-                AccessibilityDivider()
-                
-                AccessibilityToggle(
-                    isOn: $accessibilityViewModel.accessibilitySettings.voiceOver,
-                    title: "VoiceOver Support",
-                    description: "Enhanced screen reader compatibility",
-                    icon: "speaker.wave.3"
-                )
-                
-                AccessibilityDivider()
-                
-                AccessibilityToggle(
-                    isOn: $accessibilityViewModel.accessibilitySettings.screenReader,
-                    title: "Screen Reader",
-                    description: "Optimize for screen reading software",
-                    icon: "text.cursor"
-                )
-                
-                AccessibilityDivider()
-                
-                AccessibilityToggle(
-                    isOn: $accessibilityViewModel.accessibilitySettings.colorBlindAssist,
-                    title: "Color Blind Assist",
-                    description: "Enhanced color differentiation",
-                    icon: "eyedropper.halffull"
-                )
-                
-                AccessibilityDivider()
-                
-                AccessibilityToggle(
-                    isOn: $accessibilityViewModel.accessibilitySettings.hapticFeedback,
-                    title: "Haptic Feedback",
-                    description: "Vibration feedback for interactions",
-                    icon: "iphone.radiowaves.left.and.right"
-                )
-                
-                // Reset button
-                Button(action: {
-                    accessibilityViewModel.resetToDefaults()
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 16, weight: .medium))
-                        Text("Reset to Defaults")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .foregroundColor(AppColors.primary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(AppColors.primary, lineWidth: 1)
-                    )
-                }
-                .padding(.top, 8)
-            }
-        }
-    }
-    
-    private func saveSettings() {
-        guard let userId = authViewModel.currentUser?.id ?? UserDefaults.standard.string(forKey: "user_id") else {
-            return
-        }
-        
-        accessibilityViewModel.updateAccessibilitySettings(userId: userId)
-    }
-}
-
-// MARK: - Accessibility Toggle Row
+// Accessibility toggle row component with state management
+// Provides interactive toggle with visual feedback and accessibility support
 struct AccessibilityToggleRow: View {
     let title: String
     let description: String
@@ -231,7 +116,7 @@ struct AccessibilityToggleRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Icon
+            // Icon with state-based styling
             ZStack {
                 Circle()
                     .fill(isOn ? AppColors.primary.opacity(0.1) : AppColors.input)
@@ -242,7 +127,7 @@ struct AccessibilityToggleRow: View {
                     .foregroundColor(isOn ? AppColors.primary : AppColors.mutedForeground)
             }
             
-            // Text Content
+            // Text content with accessibility support
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 16, weight: .semibold))
@@ -256,7 +141,7 @@ struct AccessibilityToggleRow: View {
             
             Spacer()
             
-            // Toggle Switch
+            // Toggle switch with callback action
             Toggle("", isOn: Binding(
                 get: { isOn },
                 set: { _ in action() }
@@ -270,137 +155,8 @@ struct AccessibilityToggleRow: View {
     }
 }
 
-// MARK: - Account Settings Section
-struct AccountSettingsSection: View {
-    var body: some View {
-        SettingsCard(title: "Account", icon: "person.circle") {
-            VStack(spacing: 16) {
-                SettingsRow(
-                    title: "Edit Profile",
-                    description: "Update your personal information",
-                    icon: "pencil",
-                    action: {
-                        // Navigate to edit profile
-                    }
-                )
-                
-                Divider().background(AppColors.border)
-                
-                SettingsRow(
-                    title: "Privacy Settings",
-                    description: "Manage your privacy preferences",
-                    icon: "lock.shield",
-                    action: {
-                        // Navigate to privacy settings
-                    }
-                )
-                
-                Divider().background(AppColors.border)
-                
-                SettingsRow(
-                    title: "Notification Settings",
-                    description: "Configure push notifications",
-                    icon: "bell",
-                    action: {
-                        // Navigate to notification settings
-                    }
-                )
-            }
-        }
-    }
-}
-
-// MARK: - App Settings Section
-struct AppSettingsSection: View {
-    var body: some View {
-        SettingsCard(title: "App Preferences", icon: "slider.horizontal.3") {
-            VStack(spacing: 16) {
-                SettingsRow(
-                    title: "Language",
-                    description: "Change app language",
-                    icon: "globe",
-                    action: {
-                        // Navigate to language settings
-                    }
-                )
-                
-                Divider().background(AppColors.border)
-                
-                SettingsRow(
-                    title: "Theme",
-                    description: "Light or dark mode",
-                    icon: "paintbrush",
-                    action: {
-                        // Navigate to theme settings
-                    }
-                )
-                
-                Divider().background(AppColors.border)
-                
-                SettingsRow(
-                    title: "Data & Storage",
-                    description: "Manage app data and cache",
-                    icon: "externaldrive",
-                    action: {
-                        // Navigate to data settings
-                    }
-                )
-            }
-        }
-    }
-}
-
-// MARK: - About Section
-struct AboutSection: View {
-    var body: some View {
-        SettingsCard(title: "About", icon: "info.circle") {
-            VStack(spacing: 16) {
-                SettingsRow(
-                    title: "App Version",
-                    description: "1.0.0 (Build 1)",
-                    icon: "app.badge",
-                    showArrow: false,
-                    action: {}
-                )
-                
-                Divider().background(AppColors.border)
-                
-                SettingsRow(
-                    title: "Terms of Service",
-                    description: "Read our terms and conditions",
-                    icon: "doc.text",
-                    action: {
-                        // Navigate to terms
-                    }
-                )
-                
-                Divider().background(AppColors.border)
-                
-                SettingsRow(
-                    title: "Privacy Policy",
-                    description: "Learn about our privacy practices",
-                    icon: "hand.raised",
-                    action: {
-                        // Navigate to privacy policy
-                    }
-                )
-                
-                Divider().background(AppColors.border)
-                
-                SettingsRow(
-                    title: "Contact Support",
-                    description: "Get help with the app",
-                    icon: "questionmark.circle",
-                    action: {
-                        // Navigate to support
-                    }
-                )
-            }
-        }
-    }
-}
-
-// MARK: - Settings Card
+// Settings card container component with consistent styling
+// Provides reusable card layout for settings sections
 struct SettingsCard<Content: View>: View {
     let title: String
     let icon: String
@@ -439,7 +195,8 @@ struct SettingsCard<Content: View>: View {
     }
 }
 
-// MARK: - Settings Row
+// Settings row component for navigation and actions
+// Provides consistent row layout with icon, text, and navigation arrow
 struct SettingsRow: View {
     let title: String
     let description: String
@@ -464,7 +221,7 @@ struct SettingsRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                // Icon
+                // Icon with consistent styling
                 ZStack {
                     Circle()
                         .fill(AppColors.input)
@@ -475,7 +232,7 @@ struct SettingsRow: View {
                         .foregroundColor(AppColors.mutedForeground)
                 }
                 
-                // Text Content
+                // Text content with proper spacing
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 16, weight: .semibold))
@@ -489,7 +246,7 @@ struct SettingsRow: View {
                 
                 Spacer()
                 
-                // Arrow
+                // Navigation arrow when applicable
                 if showArrow {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14, weight: .medium))

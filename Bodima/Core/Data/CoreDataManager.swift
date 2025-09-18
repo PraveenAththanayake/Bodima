@@ -7,11 +7,52 @@ class CoreDataManager: ObservableObject {
     var container: NSPersistentContainer
     
     init() {
-        container = NSPersistentContainer(name: "DashboardDataModel")
+        // Try to load compiled model first
+        var initializedContainer = NSPersistentContainer(name: "DashboardDataModel")
+        
+        // If model is empty (not found in bundle), fall back to programmatic model
+        if initializedContainer.managedObjectModel.entities.isEmpty {
+            print("⚠️ Compiled Core Data model 'DashboardDataModel' not found. Falling back to programmatic model...")
+            initializedContainer = CoreDataConfiguration.shared.createPersistentContainerWithProgrammaticModel()
+            if initializedContainer.persistentStoreDescriptions.isEmpty {
+                let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+                let dir = appSupport.appendingPathComponent("DashboardData", isDirectory: true)
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let url = dir.appendingPathComponent("DashboardDataModel.sqlite")
+                let desc = NSPersistentStoreDescription(url: url)
+                desc.type = NSSQLiteStoreType
+                desc.shouldMigrateStoreAutomatically = true
+                desc.shouldInferMappingModelAutomatically = true
+                initializedContainer.persistentStoreDescriptions = [desc]
+            }
+        }
+        
+        container = initializedContainer
         
         container.loadPersistentStores { _, error in
             if let error = error {
-                print("❌ Core Data failed to load: \(error.localizedDescription)")
+                print("❌ Core Data failed to load: \(error.localizedDescription). Retrying with programmatic model...")
+                // Retry with programmatic model once
+                let fallback = CoreDataConfiguration.shared.createPersistentContainerWithProgrammaticModel()
+                if fallback.persistentStoreDescriptions.isEmpty {
+                    let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+                    let dir = appSupport.appendingPathComponent("DashboardData", isDirectory: true)
+                    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                    let url = dir.appendingPathComponent("DashboardDataModel.sqlite")
+                    let desc = NSPersistentStoreDescription(url: url)
+                    desc.type = NSSQLiteStoreType
+                    desc.shouldMigrateStoreAutomatically = true
+                    desc.shouldInferMappingModelAutomatically = true
+                    fallback.persistentStoreDescriptions = [desc]
+                }
+                fallback.loadPersistentStores { _, err in
+                    if let err = err {
+                        print("❌ Fallback Core Data store load failed: \(err.localizedDescription)")
+                    } else {
+                        print("✅ Fallback Core Data store loaded successfully")
+                        self.updateContainer(fallback)
+                    }
+                }
             } else {
                 print("✅ Core Data loaded successfully")
             }
@@ -137,13 +178,13 @@ class CoreDataManager: ObservableObject {
         userObject.setValue(user.id, forKey: "id")
         userObject.setValue(user.firstName, forKey: "firstName")
         userObject.setValue(user.lastName, forKey: "lastName")
-        userObject.setValue(user.bio, forKey: "bio")
+        userObject.setValue("", forKey: "bio")
         userObject.setValue(user.phoneNumber, forKey: "phoneNumber")
-        userObject.setValue(user.addressNo, forKey: "addressNo")
-        userObject.setValue(user.addressLine1, forKey: "addressLine1")
-        userObject.setValue(user.addressLine2, forKey: "addressLine2")
-        userObject.setValue(user.city, forKey: "city")
-        userObject.setValue(user.district, forKey: "district")
+        userObject.setValue("", forKey: "addressNo")
+        userObject.setValue("", forKey: "addressLine1")
+        userObject.setValue("", forKey: "addressLine2")
+        userObject.setValue("", forKey: "city")
+        userObject.setValue("", forKey: "district")
     }
     
     private func saveHabitation(_ habitation: DashboardHabitation, context: NSManagedObjectContext) {
@@ -413,16 +454,9 @@ class CoreDataManager: ObservableObject {
         
         return EnhancedUserData(
             id: id,
-            auth: "",
             firstName: firstName,
             lastName: lastName,
-            bio: bio,
-            phoneNumber: phoneNumber,
-            addressNo: addressNo,
-            addressLine1: addressLine1,
-            addressLine2: addressLine2,
-            city: city,
-            district: district
+            phoneNumber: phoneNumber
         )
     }
     

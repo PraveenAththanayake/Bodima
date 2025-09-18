@@ -1,6 +1,7 @@
 import UIKit
 import UserNotifications
 import FirebaseCore
+import CoreSpotlight
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     
@@ -83,5 +84,23 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         )
         
         completionHandler()
+    }
+    
+    // Handle Core Spotlight deep links
+    func application(_ application: UIApplication,
+                     continue userActivity: NSUserActivity,
+                     restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
+        if userActivity.activityType == CSSearchableItemActionType,
+           let identifier = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
+            // identifier format: "habitation_<id>"
+            if identifier.hasPrefix("habitation_") {
+                let habitationId = String(identifier.dropFirst("habitation_".count))
+                NotificationCenter.default.post(name: NSNotification.Name("OpenHabitationFromSpotlight"),
+                                                object: nil,
+                                                userInfo: ["habitationId": habitationId])
+                return true
+            }
+        }
+        return false
     }
 }
